@@ -20,6 +20,7 @@ export default function RegisterPage() {
     phone: "",
     password: "",
     favoriteTeamId: "",
+    invitationCode: "",
   });
   const [teams, setTeams] = useState<Team[]>([]);
   const [error, setError] = useState("");
@@ -81,6 +82,18 @@ export default function RegisterPage() {
               {error}
             </div>
           )}
+
+          <Field label="Código de invitación">
+            <input
+              name="invitationCode"
+              value={form.invitationCode}
+              onChange={handleChange}
+              required
+              className="input uppercase tracking-widest"
+              placeholder="XXXX-XXXX"
+              maxLength={9}
+            />
+          </Field>
 
           <Field label="Nombre completo">
             <input

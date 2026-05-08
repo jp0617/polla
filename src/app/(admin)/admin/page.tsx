@@ -20,6 +20,17 @@ interface AdminUser {
   _count: { predictions: number };
 }
 
+interface InvitationCode {
+  id: string;
+  code: string;
+  label: string | null;
+  maxUses: number;
+  uses: number;
+  expiresAt: string | null;
+  createdAt: string;
+  users: { id: string; name: string; email: string; createdAt: string }[];
+}
+
 export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,16 +44,23 @@ export default function AdminPage() {
   const [scoringSaving, setScoringSaving] = useState(false);
   const [scoringSaved, setScoringSaved] = useState(false);
 
+  const [codes, setCodes] = useState<InvitationCode[]>([]);
+  const [newCode, setNewCode] = useState({ label: "", maxUses: 1 });
+  const [creatingCode, setCreatingCode] = useState(false);
+  const [expandedCode, setExpandedCode] = useState<string | null>(null);
+
   useEffect(() => {
     Promise.all([
       fetch("/api/admin/users").then((r) => r.json()),
       fetch("/api/admin/scoring").then((r) => r.json()),
-    ]).then(([usersData, scoringData]) => {
+      fetch("/api/admin/invitation-codes").then((r) => r.json()),
+    ]).then(([usersData, scoringData, codesData]) => {
       setUsers(usersData.users ?? []);
       const initial: Record<string, string> = {};
       for (const u of usersData.users ?? []) initial[u.id] = String(u.manualPoints);
       setEditing(initial);
       if (scoringData.config) setScoring(scoringData.config);
+      setCodes(codesData.codes ?? []);
       setLoading(false);
     });
   }, []);
@@ -79,8 +97,23 @@ export default function AdminPage() {
     setSaving((s) => ({ ...s, [userId]: false }));
   }
 
+  async function createCode() {
+    setCreatingCode(true);
+    const res = await fetch("/api/admin/invitation-codes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: newCode.label || undefined, maxUses: newCode.maxUses }),
+    });
+    if (res.ok) {
+      const { invitationCode } = await res.json();
+      setCodes((prev) => [{ ...invitationCode, users: [] }, ...prev]);
+      setNewCode({ label: "", maxUses: 1 });
+    }
+    setCreatingCode(false);
+  }
+
   if (loading) {
-    return <div className="text-center text-slate-400 py-16">Cargando usuarios...</div>;
+    return <div className="text-center text-slate-400 py-16">Cargando...</div>;
   }
 
   return (
@@ -129,6 +162,113 @@ export default function AdminPage() {
         </div>
       </div>
 
+      {/* Invitation codes */}
+      <div>
+        <h2 className="text-xl font-bold text-white">Códigos de invitación</h2>
+        <p className="text-slate-400 text-sm mt-1 mb-4">
+          Genera códigos para que nuevas personas puedan registrarse. Cada código puede tener un límite de usos.
+        </p>
+
+        {/* Create new code */}
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 p-5 mb-4">
+          <h3 className="text-sm font-semibold text-slate-300 mb-3">Nuevo código</h3>
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-400">Etiqueta (opcional)</label>
+              <input
+                value={newCode.label}
+                onChange={(e) => setNewCode((p) => ({ ...p, label: e.target.value }))}
+                placeholder="ej. Familia, Trabajo..."
+                className="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500 w-48"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-400">Usos máximos</label>
+              <input
+                type="number"
+                min={1}
+                value={newCode.maxUses}
+                onChange={(e) => setNewCode((p) => ({ ...p, maxUses: parseInt(e.target.value) || 1 }))}
+                className="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500 w-24"
+              />
+            </div>
+            <button
+              onClick={createCode}
+              disabled={creatingCode}
+              className="px-4 py-2 bg-green-700 hover:bg-green-600 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+            >
+              {creatingCode ? "Generando..." : "Generar código"}
+            </button>
+          </div>
+        </div>
+
+        {/* Codes list */}
+        {codes.length === 0 ? (
+          <p className="text-slate-500 text-sm">No hay códigos creados aún.</p>
+        ) : (
+          <div className="space-y-2">
+            {codes.map((c) => {
+              const expired = c.expiresAt ? new Date(c.expiresAt) < new Date() : false;
+              const full = c.uses >= c.maxUses;
+              const isExpanded = expandedCode === c.id;
+              return (
+                <div key={c.id} className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+                  <div
+                    className="flex items-center gap-4 px-5 py-3 cursor-pointer hover:bg-slate-750"
+                    onClick={() => setExpandedCode(isExpanded ? null : c.id)}
+                  >
+                    <span className="font-mono text-lg font-bold text-green-400 tracking-widest">
+                      {c.code}
+                    </span>
+                    {c.label && (
+                      <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">
+                        {c.label}
+                      </span>
+                    )}
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded font-medium ml-auto ${
+                        expired || full
+                          ? "bg-red-900 text-red-300"
+                          : "bg-green-900 text-green-300"
+                      }`}
+                    >
+                      {expired ? "Expirado" : full ? "Agotado" : "Activo"}
+                    </span>
+                    <span className="text-sm text-slate-400">
+                      {c.uses}/{c.maxUses} usos
+                    </span>
+                    <span className="text-slate-500 text-xs ml-2">{isExpanded ? "▲" : "▼"}</span>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="border-t border-slate-700 px-5 py-3">
+                      {c.users.length === 0 ? (
+                        <p className="text-slate-500 text-sm">Nadie se ha registrado con este código aún.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                            Registrados con este código
+                          </p>
+                          {c.users.map((u) => (
+                            <div key={u.id} className="flex items-center gap-3 text-sm">
+                              <span className="text-white font-medium">{u.name}</span>
+                              <span className="text-slate-400">{u.email}</span>
+                              <span className="text-slate-500 text-xs ml-auto">
+                                {new Date(u.createdAt).toLocaleDateString("es-CO")}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Users */}
       <div>
         <h2 className="text-xl font-bold text-white">Usuarios</h2>
@@ -138,7 +278,6 @@ export default function AdminPage() {
       </div>
 
       <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden">
-        {/* Header */}
         <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-px bg-slate-700">
           {["Jugador", "Pronóst.", "Pred. pts", "Bonus", "Manual", "Total"].map((h) => (
             <div key={h} className="bg-slate-900 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-center first:justify-start">
@@ -154,7 +293,6 @@ export default function AdminPage() {
               key={user.id}
               className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-px bg-slate-700"
             >
-              {/* Jugador */}
               <div className="bg-slate-800 px-4 py-3">
                 <div className="flex items-center gap-2">
                   {user.isAdmin && (
@@ -167,22 +305,18 @@ export default function AdminPage() {
                 <div className="text-xs text-slate-500">{user.email}</div>
               </div>
 
-              {/* Pronósticos */}
               <div className="bg-slate-800 px-4 py-3 flex items-center justify-center">
                 <span className="text-sm text-slate-300">{user._count.predictions}</span>
               </div>
 
-              {/* Puntos de predicciones */}
               <div className="bg-slate-800 px-4 py-3 flex items-center justify-center">
                 <span className="text-sm text-slate-300">{predPoints}</span>
               </div>
 
-              {/* Bonus fase */}
               <div className="bg-slate-800 px-4 py-3 flex items-center justify-center">
                 <span className="text-sm text-purple-400">{user.bonusPoints}</span>
               </div>
 
-              {/* Puntos manuales — editable */}
               <div className="bg-slate-800 px-3 py-2 flex items-center justify-center gap-1">
                 <input
                   type="number"
@@ -200,7 +334,6 @@ export default function AdminPage() {
                 </button>
               </div>
 
-              {/* Total */}
               <div className="bg-slate-800 px-4 py-3 flex items-center justify-center">
                 <span className="font-bold text-white">{user.totalPoints}</span>
               </div>

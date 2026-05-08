@@ -9,6 +9,7 @@ const registerSchema = z.object({
   phone: z.string().min(7),
   password: z.string().min(6),
   favoriteTeamId: z.string().optional(),
+  invitationCode: z.string().min(1, "El código de invitación es requerido"),
 });
 
 export async function POST(req: Request) {
@@ -23,7 +24,33 @@ export async function POST(req: Request) {
       );
     }
 
-    const { name, email, phone, password, favoriteTeamId } = parsed.data;
+    const { name, email, phone, password, favoriteTeamId, invitationCode } = parsed.data;
+
+    // Validate invitation code
+    const code = await prisma.invitationCode.findUnique({
+      where: { code: invitationCode.toUpperCase() },
+    });
+
+    if (!code) {
+      return NextResponse.json(
+        { error: "Código de invitación inválido" },
+        { status: 400 }
+      );
+    }
+
+    if (code.uses >= code.maxUses) {
+      return NextResponse.json(
+        { error: "Este código de invitación ya no tiene usos disponibles" },
+        { status: 400 }
+      );
+    }
+
+    if (code.expiresAt && code.expiresAt < new Date()) {
+      return NextResponse.json(
+        { error: "Este código de invitación ha expirado" },
+        { status: 400 }
+      );
+    }
 
     const existing = await prisma.user.findFirst({
       where: { OR: [{ email }, { phone }] },
@@ -36,7 +63,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Check that the chosen team is not already taken
     if (favoriteTeamId) {
       const teamTaken = await prisma.user.findFirst({
         where: { favoriteTeamId },
@@ -52,10 +78,16 @@ export async function POST(req: Request) {
 
     const passwordHash = await bcrypt.hash(password, 12);
 
-    const user = await prisma.user.create({
-      data: { name, email, phone, passwordHash, favoriteTeamId },
-      select: { id: true, name: true, email: true },
-    });
+    const [user] = await prisma.$transaction([
+      prisma.user.create({
+        data: { name, email, phone, passwordHash, favoriteTeamId, invitationCodeId: code.id },
+        select: { id: true, name: true, email: true },
+      }),
+      prisma.invitationCode.update({
+        where: { id: code.id },
+        data: { uses: { increment: 1 } },
+      }),
+    ]);
 
     return NextResponse.json({ user }, { status: 201 });
   } catch (err) {

@@ -7,22 +7,35 @@ datasource db {
 }
 
 model User {
-  id             String        @id @default(cuid())
-  name           String
-  email          String        @unique
-  phone          String        @unique
-  passwordHash   String
-  favoriteTeamId String?
-  favoriteTeam   Team?         @relation(fields: [favoriteTeamId], references: [id])
-  predictions    Prediction[]
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  totalPoints    Int           @default(0)
-  bonusPoints    Int           @default(0)
-  manualPoints   Int           @default(0)
-  isAdmin        Boolean       @default(false)
+  id               String           @id @default(cuid())
+  name             String
+  email            String           @unique
+  phone            String           @unique
+  passwordHash     String
+  favoriteTeamId   String?
+  favoriteTeam     Team?            @relation(fields: [favoriteTeamId], references: [id])
+  predictions      Prediction[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  totalPoints      Int              @default(0)
+  bonusPoints      Int              @default(0)
+  manualPoints     Int              @default(0)
+  isAdmin          Boolean          @default(false)
+  invitationCodeId String?
+  invitationCode   InvitationCode?  @relation(fields: [invitationCodeId], references: [id])
 
   @@index([totalPoints])
+}
+
+model InvitationCode {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  label     String?
+  maxUses   Int      @default(1)
+  uses      Int      @default(0)
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+  users     User[]
 }
 
 model Team {
