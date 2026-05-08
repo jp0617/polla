@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 interface ScoringConfig {
   exactScore: number;
   correctWinner: number;
-  correctDraw: number;
   bonusPhaseAdvance: number;
 }
 
@@ -29,7 +28,7 @@ export default function AdminPage() {
   const [saved, setSaved] = useState<Record<string, boolean>>({});
 
   const [scoring, setScoring] = useState<ScoringConfig>({
-    exactScore: 5, correctWinner: 3, correctDraw: 1, bonusPhaseAdvance: 2,
+    exactScore: 5, correctWinner: 3, bonusPhaseAdvance: 2,
   });
   const [scoringSaving, setScoringSaving] = useState(false);
   const [scoringSaved, setScoringSaved] = useState(false);
@@ -98,7 +97,6 @@ export default function AdminPage() {
               [
                 { key: "exactScore", label: "Marcador exacto" },
                 { key: "correctWinner", label: "Ganador correcto" },
-                { key: "correctDraw", label: "Empate correcto" },
                 { key: "bonusPhaseAdvance", label: "Bonus equipo favorito" },
               ] as { key: keyof ScoringConfig; label: string }[]
             ).map(({ key, label }) => (

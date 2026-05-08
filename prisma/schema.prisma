@@ -91,12 +91,11 @@ model PhaseAdvance {
 }
 
 model ScoringConfig {
-  id               String   @id @default("singleton")
-  exactScore       Int      @default(5)
-  correctWinner    Int      @default(3)
-  correctDraw      Int      @default(1)
-  bonusPhaseAdvance Int     @default(2)
-  updatedAt        DateTime @updatedAt
+  id                String   @id @default("singleton")
+  exactScore        Int      @default(5)
+  correctWinner     Int      @default(3)
+  bonusPhaseAdvance Int      @default(2)
+  updatedAt         DateTime @updatedAt
 }
 
 enum MatchStatus {

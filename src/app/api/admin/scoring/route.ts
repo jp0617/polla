@@ -21,7 +21,6 @@ export async function GET(): Promise<NextResponse> {
 const schema = z.object({
   exactScore: z.number().int().min(0),
   correctWinner: z.number().int().min(0),
-  correctDraw: z.number().int().min(0),
   bonusPhaseAdvance: z.number().int().min(0),
 });
 
