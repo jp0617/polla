@@ -64,13 +64,14 @@ export async function POST(req: Request) {
     }
 
     if (favoriteTeamId) {
+      // Scope the uniqueness check to the same invitation code group
       const teamTaken = await prisma.user.findFirst({
-        where: { favoriteTeamId },
+        where: { favoriteTeamId, invitationCodeId: code.id },
         select: { name: true },
       });
       if (teamTaken) {
         return NextResponse.json(
-          { error: `Este equipo ya fue elegido por ${teamTaken.name}. Cada equipo solo puede tener un fanático.` },
+          { error: `Este equipo ya fue elegido por ${teamTaken.name} en tu grupo. Cada equipo solo puede tener un fanático por grupo.` },
           { status: 409 }
         );
       }

@@ -28,11 +28,16 @@ export default function RegisterPage() {
   const router = useRouter();
 
   useEffect(() => {
-    fetch("/api/teams")
+    const code = form.invitationCode.trim();
+    const url =
+      code.length === 9
+        ? `/api/teams?invitationCode=${encodeURIComponent(code)}`
+        : "/api/teams";
+    fetch(url)
       .then((r) => r.json())
       .then((d) => setTeams(d.teams ?? []))
       .catch(() => {});
-  }, []);
+  }, [form.invitationCode]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -172,7 +177,10 @@ export default function RegisterPage() {
               )}
             </select>
             <p className="text-xs text-slate-400 mt-1">
-              Cada equipo solo puede ser elegido por un jugador. Si tu equipo avanza de fase, ganas{" "}
+              {form.invitationCode.length === 9
+                ? "Disponibilidad actualizada para tu grupo. "
+                : "Ingresa tu código primero para ver la disponibilidad de tu grupo. "}
+              Si tu equipo avanza de fase, ganas{" "}
               <span className="text-purple-400 font-medium">+2 puntos</span> automáticamente.
             </p>
           </Field>
