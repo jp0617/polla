@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String        @id @default(cuid())
+  name           String
+  email          String        @unique
+  phone          String        @unique
+  passwordHash   String
+  favoriteTeamId String?
+  favoriteTeam   Team?         @relation(fields: [favoriteTeamId], references: [id])
+  predictions    Prediction[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  totalPoints    Int           @default(0)
+  bonusPoints    Int           @default(0)
+  manualPoints   Int           @default(0)
+  isAdmin        Boolean       @default(false)
+
+  @@index([totalPoints])
+}
+
+model Team {
+  id            String         @id @default(cuid())
+  apiId         Int            @unique
+  name          String
+  shortName     String
+  code          String
+  crest         String?
+  group         String?
+  currentStage  String         @default("GROUP_STAGE")
+  eliminated    Boolean        @default(false)
+  homeMatches   Match[]        @relation("HomeTeam")
+  awayMatches   Match[]        @relation("AwayTeam")
+  favoritedBy   User[]
+  phaseAdvances PhaseAdvance[]
+}
+
+model Match {
+  id          String       @id @default(cuid())
+  apiMatchId  Int          @unique
+  homeTeamId  String
+  awayTeamId  String
+  homeTeam    Team         @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam    Team         @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  kickoff     DateTime
+  stage       String
+  group       String?
+  status      MatchStatus  @default(SCHEDULED)
+  homeScore   Int?
+  awayScore   Int?
+  predictions Prediction[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([kickoff])
+  @@index([status])
+}
+
+model Prediction {
+  id        String           @id @default(cuid())
+  userId    String
+  matchId   String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match     Match            @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  homeScore Int
+  awayScore Int
+  points    Int?
+  status    PredictionStatus @default(PENDING)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([userId, matchId])
+  @@index([userId])
+  @@index([matchId])
+}
+
+model PhaseAdvance {
+  id         String   @id @default(cuid())
+  teamId     String
+  team       Team     @relation(fields: [teamId], references: [id])
+  fromStage  String
+  toStage    String
+  detectedAt DateTime @default(now())
+  bonusGiven Boolean  @default(false)
+}
+
+model ScoringConfig {
+  id               String   @id @default("singleton")
+  exactScore       Int      @default(5)
+  correctWinner    Int      @default(3)
+  correctDraw      Int      @default(1)
+  bonusPhaseAdvance Int     @default(2)
+  updatedAt        DateTime @updatedAt
+}
+
+enum MatchStatus {
+  SCHEDULED
+  IN_PLAY
+  PAUSED
+  FINISHED
+  POSTPONED
+  CANCELLED
+}
+
+enum PredictionStatus {
+  PENDING
+  LOCKED
+  SCORED
+}
