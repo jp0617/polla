@@ -30,7 +30,7 @@ export function scoreMatch(
 
   return {
     points: pts,
-    breakdown: { exactScore, correctWinner, correctDraw: false, bonusTeam: false },
+    breakdown: { exactScore, correctWinner, bonusTeam: false },
   };
 }
 

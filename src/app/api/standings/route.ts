@@ -39,7 +39,6 @@ export async function GET() {
     ) => {
       const exactScores = user.predictions.filter((p) => p.points === 5).length;
       const correctWinners = user.predictions.filter((p) => p.points === 3).length;
-      const correctDraws = user.predictions.filter((p) => p.points === 1).length;
 
       return {
         rank: idx + 1,
@@ -49,7 +48,6 @@ export async function GET() {
         bonusPoints: user.bonusPoints,
         exactScores,
         correctWinners,
-        correctDraws,
         favoriteTeam: user.favoriteTeam,
         isCurrentUser: user.id === userId,
       };
