@@ -1,0 +1,57 @@
+services:
+  - type: web
+    name: polla
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      # Supabase → Project Settings → Database → Connection string (Transaction pooler)
+      - key: DATABASE_URL
+        sync: false
+      # Supabase → Project Settings → Database → Connection string (Session pooler o Direct)
+      - key: DIRECT_URL
+        sync: false
+      - key: NODE_ENV
+        value: production
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      - key: FOOTBALL_API_BASE_URL
+        value: https://api.football-data.org/v4
+      - key: FOOTBALL_COMPETITION_ID
+        value: "2000"
+      # Debes configurar estas manualmente en el dashboard de Render:
+      - key: FOOTBALL_API_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_NAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_PHONE
+        sync: false
+
+  - type: cron
+    name: polla-sync
+    runtime: node
+    schedule: "*/5 * * * *"
+    buildCommand: echo "skip"
+    startCommand: >
+      curl -sf
+      -H "Authorization: Bearer $CRON_SECRET"
+      $APP_URL/api/cron/sync
+    envVars:
+      - key: CRON_SECRET
+        fromService:
+          name: polla
+          type: web
+          envVarKey: CRON_SECRET
+      - key: APP_URL
+        fromService:
+          name: polla
+          type: web
+          property: hostport

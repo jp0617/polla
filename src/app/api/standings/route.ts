@@ -1,0 +1,72 @@
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db/client";
+
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const userId = session.user.id;
+  const isAdmin = (session.user as { isAdmin?: boolean }).isAdmin;
+
+  // Scope standings to the user's invitation code group; global admin sees everyone
+  let codeFilter: { invitationCodeId: string } | Record<string, never> = {};
+  if (!isAdmin) {
+    const me = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { invitationCodeId: true },
+    });
+    if (me?.invitationCodeId) {
+      codeFilter = { invitationCodeId: me.invitationCodeId };
+    }
+  }
+
+  const users = await prisma.user.findMany({
+    where: codeFilter,
+    select: {
+      id: true,
+      name: true,
+      totalPoints: true,
+      bonusPoints: true,
+      favoriteTeam: { select: { name: true, crest: true, code: true } },
+      predictions: {
+        where: { status: "SCORED" },
+        select: { points: true },
+      },
+    },
+    orderBy: [{ totalPoints: "desc" }, { name: "asc" }],
+  });
+
+  const leaderboard = users.map(
+    (
+      user: {
+        id: string;
+        name: string;
+        totalPoints: number;
+        bonusPoints: number;
+        favoriteTeam: { name: string; crest: string | null; code: string } | null;
+        predictions: { points: number | null }[];
+      },
+      idx: number
+    ) => {
+      const exactScores = user.predictions.filter((p) => p.points === 5).length;
+      const correctWinners = user.predictions.filter((p) => p.points === 3).length;
+
+      return {
+        rank: idx + 1,
+        userId: user.id,
+        name: user.name,
+        totalPoints: user.totalPoints,
+        bonusPoints: user.bonusPoints,
+        exactScores,
+        correctWinners,
+        favoriteTeam: user.favoriteTeam,
+        isCurrentUser: user.id === userId,
+      };
+    }
+  );
+
+  return NextResponse.json({ leaderboard });
+}
