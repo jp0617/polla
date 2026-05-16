@@ -40,9 +40,9 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Equipo no encontrado" }, { status: 404 });
   }
 
-  // Award bonus to all users who chose this team as favorite
+  // Award bonus to all users who picked this team as champion
   const winners = await prisma.user.findMany({
-    where: { favoriteTeamId: teamId },
+    where: { championPickId: teamId },
     select: { id: true },
   });
 

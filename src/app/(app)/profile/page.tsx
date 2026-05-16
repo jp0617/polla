@@ -19,6 +19,7 @@ interface Profile {
   totalPoints: number;
   bonusPoints: number;
   favoriteTeam: { id: string; name: string; crest: string | null; code: string } | null;
+  championPick: { id: string; name: string; crest: string | null; code: string } | null;
   stats: { exactScores: number; correctWinners: number };
   adminOfCode: { id: string; label: string | null } | null;
 }
@@ -29,7 +30,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ name: "", phone: "", favoriteTeamId: "" });
+  const [form, setForm] = useState({ name: "", phone: "", favoriteTeamId: "", championPickId: "" });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -56,6 +57,7 @@ export default function ProfilePage() {
         name: p.name,
         phone: p.phone,
         favoriteTeamId: p.favoriteTeam?.id ?? "",
+        championPickId: p.championPick?.id ?? "",
       });
     });
   }
@@ -188,6 +190,30 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {/* Champion pick */}
+      {profile.championPick ? (
+        <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 flex items-center gap-3">
+          {profile.championPick.crest && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={profile.championPick.crest} alt="" className="w-12 h-12 object-contain" />
+          )}
+          <div>
+            <p className="text-xs text-slate-400">Tu pronóstico de campeón</p>
+            <p className="font-semibold text-white">{profile.championPick.name}</p>
+          </div>
+          <div className="ml-auto bg-yellow-900/50 border border-yellow-700 text-yellow-300 text-xs px-2 py-1 rounded-full">
+            🏆 Campeón
+          </div>
+        </div>
+      ) : (
+        <div className="bg-slate-800/50 rounded-xl border border-dashed border-slate-600 p-4 text-center">
+          <p className="text-slate-400 text-sm">No tienes pronóstico de campeón</p>
+          <p className="text-xs text-slate-500 mt-1">
+            Elige un equipo para ganar puntos extra si sale campeón
+          </p>
+        </div>
+      )}
+
       {/* Edit form */}
       {success && (
         <div className="bg-green-900/50 border border-green-700 text-green-300 px-4 py-3 rounded-lg text-sm">
@@ -262,6 +288,27 @@ export default function ProfilePage() {
             </select>
             <p className="text-xs text-slate-500 mt-1">
               Cada equipo puede ser elegido por un solo jugador.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm text-slate-300 mb-1">
+              Pronóstico de campeón 🏆
+            </label>
+            <select
+              value={form.championPickId}
+              onChange={(e) => setForm((f) => ({ ...f, championPickId: e.target.value }))}
+              className="w-full bg-slate-900 border border-slate-600 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              <option value="">— Sin pronóstico de campeón —</option>
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({t.code})
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500 mt-1">
+              Ganas puntos extra si tu equipo gana el torneo. Varios jugadores pueden elegir el mismo.
             </p>
           </div>
 
