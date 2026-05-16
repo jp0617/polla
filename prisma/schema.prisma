@@ -107,13 +107,16 @@ model PhaseAdvance {
 }
 
 model ScoringConfig {
-  id                String   @id @default("singleton")
-  exactScore        Int      @default(5)
-  correctWinner     Int      @default(3)
-  correctDraw       Int      @default(2)
-  bonusPhaseAdvance Int      @default(2)
-  lockMinutes       Int      @default(5)
-  updatedAt         DateTime @updatedAt
+  id                 String   @id @default("singleton")
+  exactScore         Int      @default(5)
+  correctWinner      Int      @default(3)
+  correctDraw        Int      @default(2)
+  bonusPhaseAdvance  Int      @default(2)
+  championBonus      Int      @default(10)
+  lockMinutes        Int      @default(5)
+  championTeamId     String?
+  championBonusGiven Boolean  @default(false)
+  updatedAt          DateTime @updatedAt
 }
 
 
