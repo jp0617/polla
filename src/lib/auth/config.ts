@@ -31,10 +31,8 @@ export const authConfig: NextAuthConfig = {
       if (user) {
         token.id = user.id;
         token.phone = user.phone;
-        token.favoriteTeamId = user.favoriteTeamId;
         token.isAdmin = user.isAdmin ?? false;
       }
-      // Refresca isAdmin desde la DB en cada renovación del token
       if (token.id) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id as string },
@@ -48,7 +46,6 @@ export const authConfig: NextAuthConfig = {
       if (token) {
         session.user.id = token.id as string;
         session.user.phone = token.phone;
-        session.user.favoriteTeamId = token.favoriteTeamId;
         session.user.isAdmin = token.isAdmin;
       }
       return session;
@@ -72,7 +69,6 @@ export const authConfig: NextAuthConfig = {
           name: user.name,
           email: user.email,
           phone: user.phone,
-          favoriteTeamId: user.favoriteTeamId ?? undefined,
           isAdmin: user.isAdmin,
         };
       },

@@ -101,7 +101,7 @@ export async function syncMatches(): Promise<{
 
       const unscoredPredictions = await prisma.prediction.findMany({
         where: { matchId: match.id, status: { not: "SCORED" } },
-        include: { user: { select: { id: true, favoriteTeamId: true } } },
+        select: { id: true, userId: true, homeScore: true, awayScore: true },
       });
 
       for (const pred of unscoredPredictions) {
@@ -116,7 +116,7 @@ export async function syncMatches(): Promise<{
           data: { points: result.points, status: "SCORED" },
         });
 
-        // Update user total points
+        // Update user total prediction points (bonus is tracked separately in Membership)
         await prisma.user.update({
           where: { id: pred.userId },
           data: { totalPoints: { increment: result.points } },
@@ -166,13 +166,8 @@ async function detectPhaseAdvancesForMatch(
 
   for (const team of [homeTeam, awayTeam]) {
     if (stageOrder[currentStage] > stageOrder[team.currentStage]) {
-      // Team advanced to a new stage
       const existingAdvance = await prisma.phaseAdvance.findFirst({
-        where: {
-          teamId: team.id,
-          toStage: currentStage,
-          bonusGiven: true,
-        },
+        where: { teamId: team.id, toStage: currentStage, bonusGiven: true },
       });
 
       if (!existingAdvance) {
@@ -184,18 +179,16 @@ async function detectPhaseAdvancesForMatch(
           },
         });
 
-        // Award +2 bonus points to all users who have this team as favorite
-        const favUsers = await prisma.user.findMany({
+        // Award bonus to all memberships that have this team as favorite
+        const favMemberships = await prisma.membership.findMany({
           where: { favoriteTeamId: team.id },
+          select: { id: true },
         });
 
-        for (const user of favUsers) {
-          await prisma.user.update({
-            where: { id: user.id },
-            data: {
-              totalPoints: { increment: bonusPoints },
-              bonusPoints: { increment: bonusPoints },
-            },
+        for (const m of favMemberships) {
+          await prisma.membership.update({
+            where: { id: m.id },
+            data: { bonusPoints: { increment: bonusPoints } },
           });
           bonusCount++;
         }
@@ -205,7 +198,6 @@ async function detectPhaseAdvancesForMatch(
           data: { bonusGiven: true },
         });
 
-        // Update team's current stage
         await prisma.team.update({
           where: { id: team.id },
           data: { currentStage },

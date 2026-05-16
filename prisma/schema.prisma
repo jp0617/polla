@@ -7,57 +7,68 @@ datasource db {
 }
 
 model User {
-  id               String           @id @default(cuid())
-  name             String
-  email            String           @unique
-  phone            String           @unique
-  passwordHash     String
-  favoriteTeamId   String?
-  favoriteTeam     Team?            @relation("FavoriteTeam", fields: [favoriteTeamId], references: [id])
-  championPickId   String?
-  championPick     Team?            @relation("ChampionPick", fields: [championPickId], references: [id])
-  predictions      Prediction[]
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  totalPoints      Int              @default(0)
-  bonusPoints      Int              @default(0)
-  manualPoints     Int              @default(0)
-  isAdmin          Boolean          @default(false)
-  invitationCodeId String?
-  invitationCode   InvitationCode?  @relation("CodeMember", fields: [invitationCodeId], references: [id])
-  adminOfCodes     InvitationCode[] @relation("CodeAdmin")
+  id           String       @id @default(cuid())
+  name         String
+  email        String       @unique
+  phone        String       @unique
+  passwordHash String
+  totalPoints  Int          @default(0)
+  manualPoints Int          @default(0)
+  isAdmin      Boolean      @default(false)
+  predictions  Prediction[]
+  memberships  Membership[]
+  adminOfCodes InvitationCode[] @relation("CodeAdmin")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   @@index([totalPoints])
 }
 
+model Membership {
+  id               String         @id @default(cuid())
+  userId           String
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invitationCodeId String
+  invitationCode   InvitationCode @relation("CodeMembership", fields: [invitationCodeId], references: [id], onDelete: Cascade)
+  favoriteTeamId   String?
+  favoriteTeam     Team?          @relation("MemberFavoriteTeam", fields: [favoriteTeamId], references: [id])
+  championPickId   String?
+  championPick     Team?          @relation("MemberChampionPick", fields: [championPickId], references: [id])
+  bonusPoints      Int            @default(0)
+  joinedAt         DateTime       @default(now())
+
+  @@unique([userId, invitationCodeId])
+  @@index([invitationCodeId])
+}
+
 model InvitationCode {
-  id        String    @id @default(cuid())
-  code      String    @unique
-  label     String?
-  maxUses   Int       @default(1)
-  uses      Int       @default(0)
-  expiresAt DateTime?
-  createdAt DateTime  @default(now())
-  users     User[]    @relation("CodeMember")
-  adminId   String?
-  admin     User?     @relation("CodeAdmin", fields: [adminId], references: [id])
+  id          String       @id @default(cuid())
+  code        String       @unique
+  label       String?
+  maxUses     Int          @default(1)
+  uses        Int          @default(0)
+  expiresAt   DateTime?
+  createdAt   DateTime     @default(now())
+  memberships Membership[] @relation("CodeMembership")
+  adminId     String?
+  admin       User?        @relation("CodeAdmin", fields: [adminId], references: [id])
 }
 
 model Team {
-  id            String         @id @default(cuid())
-  apiId         Int            @unique
-  name          String
-  shortName     String
-  code          String
-  crest         String?
-  group         String?
-  currentStage  String         @default("GROUP_STAGE")
-  eliminated    Boolean        @default(false)
-  homeMatches   Match[]        @relation("HomeTeam")
-  awayMatches   Match[]        @relation("AwayTeam")
-  favoritedBy   User[]         @relation("FavoriteTeam")
-  championPicks User[]         @relation("ChampionPick")
-  phaseAdvances PhaseAdvance[]
+  id                  String         @id @default(cuid())
+  apiId               Int            @unique
+  name                String
+  shortName           String
+  code                String
+  crest               String?
+  group               String?
+  currentStage        String         @default("GROUP_STAGE")
+  eliminated          Boolean        @default(false)
+  homeMatches         Match[]        @relation("HomeTeam")
+  awayMatches         Match[]        @relation("AwayTeam")
+  memberFavorites     Membership[]   @relation("MemberFavoriteTeam")
+  memberChampionPicks Membership[]   @relation("MemberChampionPick")
+  phaseAdvances       PhaseAdvance[]
 }
 
 model Match {

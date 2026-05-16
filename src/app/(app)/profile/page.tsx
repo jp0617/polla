@@ -11,15 +11,25 @@ interface Team {
   takenBy: string | null;
   isOwnTeam: boolean;
 }
+
+interface Membership {
+  id: string;
+  bonusPoints: number;
+  invitationCode: { id: string; code: string; label: string | null };
+  favoriteTeam: { id: string; name: string; crest: string | null; code: string } | null;
+  championPick: { id: string; name: string; crest: string | null; code: string } | null;
+}
+
 interface Profile {
   id: string;
   name: string;
   email: string;
   phone: string;
   totalPoints: number;
+  predictionPoints: number;
+  manualPoints: number;
   bonusPoints: number;
-  favoriteTeam: { id: string; name: string; crest: string | null; code: string } | null;
-  championPick: { id: string; name: string; crest: string | null; code: string } | null;
+  memberships: Membership[];
   stats: { exactScores: number; correctWinners: number };
   adminOfCode: { id: string; label: string | null } | null;
 }
@@ -29,14 +39,27 @@ export default function ProfilePage() {
   const isAdmin = session?.user?.isAdmin;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
-  const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ name: "", phone: "", favoriteTeamId: "", championPickId: "" });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [success, setSuccess] = useState(false);
+
+  // Edit name/phone
+  const [editingInfo, setEditingInfo] = useState(false);
+  const [infoForm, setInfoForm] = useState({ name: "", phone: "" });
+
+  // Edit membership (favorite/champion per group)
+  const [editingMembership, setEditingMembership] = useState<string | null>(null);
+  const [membershipForm, setMembershipForm] = useState({ favoriteTeamId: "", championPickId: "" });
+
+  // Join new group
+  const [joiningGroup, setJoiningGroup] = useState(false);
+  const [joinForm, setJoinForm] = useState({ invitationCode: "", favoriteTeamId: "", championPickId: "" });
+  const [joinTeams, setJoinTeams] = useState<Team[]>([]);
+  const [joinError, setJoinError] = useState("");
+  const [joining, setJoining] = useState(false);
+
   const [notifLoading, setNotifLoading] = useState(false);
   const [notifResult, setNotifResult] = useState<string | null>(null);
-
   const [waConnected, setWaConnected] = useState(false);
   const [waQr, setWaQr] = useState<string | null>(null);
   const [waPolling, setWaPolling] = useState(false);
@@ -46,6 +69,14 @@ export default function ProfilePage() {
     loadData();
   }, []);
 
+  // Load teams when join code changes
+  useEffect(() => {
+    const code = joinForm.invitationCode.trim();
+    if (code.length !== 9) { setJoinTeams([]); return; }
+    const url = `/api/teams?invitationCode=${encodeURIComponent(code)}`;
+    fetch(url).then((r) => r.json()).then((d) => setJoinTeams(d.teams ?? [])).catch(() => {});
+  }, [joinForm.invitationCode]);
+
   function loadData() {
     Promise.all([
       fetch("/api/profile").then((r) => r.json()),
@@ -53,37 +84,69 @@ export default function ProfilePage() {
     ]).then(([p, t]) => {
       setProfile(p);
       setTeams(t.teams ?? []);
-      setForm({
-        name: p.name,
-        phone: p.phone,
-        favoriteTeamId: p.favoriteTeam?.id ?? "",
-        championPickId: p.championPick?.id ?? "",
-      });
+      setInfoForm({ name: p.name, phone: p.phone });
     });
   }
 
-  async function saveProfile(e: React.FormEvent) {
+  async function saveInfo(e: React.FormEvent) {
     e.preventDefault();
-    setSaveError("");
-    setSaving(true);
-
+    setSaveError(""); setSaving(true);
     const res = await fetch("/api/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ name: infoForm.name, phone: infoForm.phone }),
     });
-    const data = await res.json();
     setSaving(false);
-
-    if (!res.ok) {
-      setSaveError(data.error || "Error al guardar");
-      return;
-    }
-
-    setSuccess(true);
-    setEditing(false);
-    loadData();
+    if (!res.ok) { setSaveError((await res.json()).error || "Error al guardar"); return; }
+    setSuccess(true); setEditingInfo(false); loadData();
     setTimeout(() => setSuccess(false), 3000);
+  }
+
+  function startEditMembership(m: Membership) {
+    setEditingMembership(m.id);
+    setMembershipForm({
+      favoriteTeamId: m.favoriteTeam?.id ?? "",
+      championPickId: m.championPick?.id ?? "",
+    });
+    setSaveError("");
+  }
+
+  async function saveMembership(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingMembership) return;
+    setSaveError(""); setSaving(true);
+    const res = await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        membershipId: editingMembership,
+        favoriteTeamId: membershipForm.favoriteTeamId || null,
+        championPickId: membershipForm.championPickId || null,
+      }),
+    });
+    setSaving(false);
+    if (!res.ok) { setSaveError((await res.json()).error || "Error al guardar"); return; }
+    setSuccess(true); setEditingMembership(null); loadData();
+    setTimeout(() => setSuccess(false), 3000);
+  }
+
+  async function joinGroup(e: React.FormEvent) {
+    e.preventDefault();
+    setJoinError(""); setJoining(true);
+    const res = await fetch("/api/memberships", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        invitationCode: joinForm.invitationCode,
+        favoriteTeamId: joinForm.favoriteTeamId || undefined,
+        championPickId: joinForm.championPickId || undefined,
+      }),
+    });
+    setJoining(false);
+    if (!res.ok) { setJoinError((await res.json()).error || "Error al unirse"); return; }
+    setJoiningGroup(false);
+    setJoinForm({ invitationCode: "", favoriteTeamId: "", championPickId: "" });
+    loadData();
   }
 
   async function pollWaStatus() {
@@ -106,34 +169,25 @@ export default function ProfilePage() {
   }
 
   function stopWaPolling() {
-    if (waIntervalRef.current) {
-      clearInterval(waIntervalRef.current);
-      waIntervalRef.current = null;
-    }
+    if (waIntervalRef.current) { clearInterval(waIntervalRef.current); waIntervalRef.current = null; }
     setWaPolling(false);
   }
 
   async function sendDailyResults() {
-    setNotifLoading(true);
-    setNotifResult(null);
-    const res = await fetch("/api/notifications/daily", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
+    setNotifLoading(true); setNotifResult(null);
+    const res = await fetch("/api/notifications/daily", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
     const data = await res.json();
     setNotifLoading(false);
     setNotifResult(`Enviados: ${data.sent} · Fallidos: ${data.failed}`);
   }
 
   if (!profile) {
-    return (
-      <div className="text-center text-slate-400 py-16">Cargando perfil...</div>
-    );
+    return <div className="text-center text-slate-400 py-16">Cargando perfil...</div>;
   }
 
-  const availableTeams = teams.filter((t) => !t.takenBy || t.isOwnTeam);
-  const takenTeams = teams.filter((t) => t.takenBy && !t.isOwnTeam);
+  const allTeams = teams;
+  const joinAvailable = joinTeams.filter((t) => !t.takenBy);
+  const joinTaken = joinTeams.filter((t) => t.takenBy);
 
   return (
     <div className="max-w-lg mx-auto space-y-6">
@@ -151,195 +205,185 @@ export default function ProfilePage() {
             <p className="text-slate-400 text-sm">{profile.phone}</p>
           </div>
         </div>
-
         <div className="grid grid-cols-3 gap-3 mt-6">
           <MiniStat label="Puntos" value={profile.totalPoints} />
           <MiniStat label="Exactos" value={profile.stats.exactScores} />
-          <MiniStat label="Bonus" value={profile.bonusPoints} />
+          <MiniStat label="Bonus total" value={profile.bonusPoints} />
         </div>
       </div>
 
-      {/* Favorite team */}
-      {profile.favoriteTeam ? (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 flex items-center gap-3">
-          {profile.favoriteTeam.crest && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={profile.favoriteTeam.crest}
-              alt=""
-              className="w-12 h-12 object-contain"
-            />
-          )}
-          <div>
-            <p className="text-xs text-slate-400">Tu equipo favorito</p>
-            <p className="font-semibold text-white">{profile.favoriteTeam.name}</p>
-            <p className="text-xs text-purple-400">
-              +{profile.bonusPoints} puntos de bonus ganados
-            </p>
-          </div>
-          <div className="ml-auto bg-green-900/50 border border-green-700 text-green-300 text-xs px-2 py-1 rounded-full">
-            🔒 Reservado
-          </div>
-        </div>
-      ) : (
-        <div className="bg-slate-800/50 rounded-xl border border-dashed border-slate-600 p-4 text-center">
-          <p className="text-slate-400 text-sm">No tienes equipo favorito seleccionado</p>
-          <p className="text-xs text-slate-500 mt-1">
-            Elige uno para ganar +2 pts cada vez que avance de fase
-          </p>
-        </div>
-      )}
-
-      {/* Champion pick */}
-      {profile.championPick ? (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 flex items-center gap-3">
-          {profile.championPick.crest && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={profile.championPick.crest} alt="" className="w-12 h-12 object-contain" />
-          )}
-          <div>
-            <p className="text-xs text-slate-400">Tu pronóstico de campeón</p>
-            <p className="font-semibold text-white">{profile.championPick.name}</p>
-          </div>
-          <div className="ml-auto bg-yellow-900/50 border border-yellow-700 text-yellow-300 text-xs px-2 py-1 rounded-full">
-            🏆 Campeón
-          </div>
-        </div>
-      ) : (
-        <div className="bg-slate-800/50 rounded-xl border border-dashed border-slate-600 p-4 text-center">
-          <p className="text-slate-400 text-sm">No tienes pronóstico de campeón</p>
-          <p className="text-xs text-slate-500 mt-1">
-            Elige un equipo para ganar puntos extra si sale campeón
-          </p>
-        </div>
-      )}
-
-      {/* Edit form */}
       {success && (
         <div className="bg-green-900/50 border border-green-700 text-green-300 px-4 py-3 rounded-lg text-sm">
-          ✓ Perfil actualizado correctamente
+          ✓ Guardado correctamente
         </div>
       )}
 
-      {editing ? (
-        <form
-          onSubmit={saveProfile}
-          className="bg-slate-800 rounded-2xl border border-slate-700 p-6 space-y-4"
-        >
-          <h3 className="font-semibold text-white">Editar perfil</h3>
-
-          {saveError && (
-            <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded-lg text-sm">
-              {saveError}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm text-slate-300 mb-1">Nombre</label>
-            <input
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              className="w-full bg-slate-900 border border-slate-600 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-slate-300 mb-1">Teléfono</label>
-            <input
-              value={form.phone}
-              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-              className="w-full bg-slate-900 border border-slate-600 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-slate-300 mb-1">
-              Equipo favorito
-            </label>
-            <select
-              value={form.favoriteTeamId}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, favoriteTeamId: e.target.value }))
-              }
-              className="w-full bg-slate-900 border border-slate-600 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
-            >
-              <option value="">— Sin equipo favorito —</option>
-
-              {availableTeams.length > 0 && (
-                <optgroup label="Disponibles">
-                  {availableTeams.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.code})
-                      {t.isOwnTeam ? " — tu equipo actual" : ""}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-
-              {takenTeams.length > 0 && (
-                <optgroup label="Ya elegidos por otros">
-                  {takenTeams.map((t) => (
-                    <option key={t.id} value="" disabled>
-                      {t.name} ({t.code}) — {t.takenBy}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-            <p className="text-xs text-slate-500 mt-1">
-              Cada equipo puede ser elegido por un solo jugador.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm text-slate-300 mb-1">
-              Pronóstico de campeón 🏆
-            </label>
-            <select
-              value={form.championPickId}
-              onChange={(e) => setForm((f) => ({ ...f, championPickId: e.target.value }))}
-              className="w-full bg-slate-900 border border-slate-600 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
-            >
-              <option value="">— Sin pronóstico de campeón —</option>
-              {teams.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} ({t.code})
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-slate-500 mt-1">
-              Ganas puntos extra si tu equipo gana el torneo. Varios jugadores pueden elegir el mismo.
-            </p>
-          </div>
-
+      {/* Edit name/phone */}
+      {editingInfo ? (
+        <form onSubmit={saveInfo} className="bg-slate-800 rounded-2xl border border-slate-700 p-6 space-y-4">
+          <h3 className="font-semibold text-white">Editar información</h3>
+          {saveError && <p className="text-red-400 text-sm">{saveError}</p>}
+          <Field label="Nombre">
+            <input value={infoForm.name} onChange={(e) => setInfoForm((f) => ({ ...f, name: e.target.value }))} className="input" />
+          </Field>
+          <Field label="Teléfono">
+            <input value={infoForm.phone} onChange={(e) => setInfoForm((f) => ({ ...f, phone: e.target.value }))} className="input" />
+          </Field>
           <div className="flex gap-3">
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 bg-green-600 hover:bg-green-500 disabled:bg-green-800 text-white py-2 rounded-lg font-medium transition-colors"
-            >
+            <button type="submit" disabled={saving} className="flex-1 bg-green-600 hover:bg-green-500 disabled:bg-green-800 text-white py-2 rounded-lg font-medium">
               {saving ? "Guardando..." : "Guardar"}
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setEditing(false);
-                setSaveError("");
-              }}
-              className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2 rounded-lg font-medium transition-colors"
-            >
+            <button type="button" onClick={() => setEditingInfo(false)} className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2 rounded-lg font-medium">
               Cancelar
             </button>
           </div>
         </form>
       ) : (
-        <button
-          onClick={() => setEditing(true)}
-          className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 py-3 rounded-xl font-medium transition-colors"
-        >
-          ✏️ Editar perfil
+        <button onClick={() => setEditingInfo(true)} className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 py-3 rounded-xl font-medium">
+          ✏️ Editar nombre y teléfono
         </button>
       )}
+
+      {/* Memberships */}
+      <div className="space-y-3">
+        <h2 className="text-lg font-semibold text-white">Mis grupos</h2>
+
+        {profile.memberships.length === 0 && (
+          <p className="text-slate-400 text-sm">No perteneces a ningún grupo aún.</p>
+        )}
+
+        {profile.memberships.map((m) => (
+          <div key={m.id} className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+            {/* Group header */}
+            <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+              <div>
+                <span className="font-mono font-bold text-green-400 tracking-widest text-sm">{m.invitationCode.code}</span>
+                {m.invitationCode.label && (
+                  <span className="ml-2 text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">{m.invitationCode.label}</span>
+                )}
+              </div>
+              <span className="text-xs text-purple-400">+{m.bonusPoints} bonus</span>
+            </div>
+
+            <div className="p-4 space-y-3">
+              {/* Favorite team */}
+              {m.favoriteTeam ? (
+                <div className="flex items-center gap-3">
+                  {m.favoriteTeam.crest && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={m.favoriteTeam.crest} alt="" className="w-8 h-8 object-contain" />
+                  )}
+                  <div>
+                    <p className="text-xs text-slate-400">Equipo favorito</p>
+                    <p className="text-sm font-semibold text-white">{m.favoriteTeam.name}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-slate-500 text-sm">Sin equipo favorito</p>
+              )}
+
+              {/* Champion pick */}
+              {m.championPick ? (
+                <div className="flex items-center gap-3">
+                  {m.championPick.crest && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={m.championPick.crest} alt="" className="w-8 h-8 object-contain" />
+                  )}
+                  <div>
+                    <p className="text-xs text-slate-400">Pronóstico de campeón 🏆</p>
+                    <p className="text-sm font-semibold text-white">{m.championPick.name}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-slate-500 text-sm">Sin pronóstico de campeón</p>
+              )}
+
+              {/* Edit membership */}
+              {editingMembership === m.id ? (
+                <form onSubmit={saveMembership} className="space-y-3 pt-2 border-t border-slate-700">
+                  {saveError && <p className="text-red-400 text-sm">{saveError}</p>}
+                  <Field label="Equipo favorito (exclusivo en este grupo)">
+                    <select value={membershipForm.favoriteTeamId} onChange={(e) => setMembershipForm((f) => ({ ...f, favoriteTeamId: e.target.value }))} className="input">
+                      <option value="">— Sin equipo favorito —</option>
+                      {allTeams.filter((t) => !t.takenBy || t.isOwnTeam).map((t) => (
+                        <option key={t.id} value={t.id}>{t.name} ({t.code}){t.isOwnTeam ? " — tu equipo actual" : ""}</option>
+                      ))}
+                      {allTeams.filter((t) => t.takenBy && !t.isOwnTeam).map((t) => (
+                        <option key={t.id} value="" disabled>{t.name} ({t.code}) — {t.takenBy}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Pronóstico de campeón 🏆">
+                    <select value={membershipForm.championPickId} onChange={(e) => setMembershipForm((f) => ({ ...f, championPickId: e.target.value }))} className="input">
+                      <option value="">— Sin pronóstico —</option>
+                      {allTeams.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name} ({t.code})</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={saving} className="flex-1 bg-green-600 hover:bg-green-500 disabled:bg-green-800 text-white py-1.5 rounded-lg text-sm font-medium">
+                      {saving ? "Guardando..." : "Guardar"}
+                    </button>
+                    <button type="button" onClick={() => { setEditingMembership(null); setSaveError(""); }} className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 py-1.5 rounded-lg text-sm font-medium">
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <button onClick={() => startEditMembership(m)} className="text-xs text-slate-400 hover:text-slate-200 underline">
+                  Cambiar favorito / campeón
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+
+        {/* Join new group */}
+        {joiningGroup ? (
+          <form onSubmit={joinGroup} className="bg-slate-800 rounded-xl border border-slate-700 p-4 space-y-3">
+            <h3 className="font-semibold text-white text-sm">Unirse a un grupo</h3>
+            {joinError && <p className="text-red-400 text-sm">{joinError}</p>}
+            <Field label="Código de invitación">
+              <input
+                value={joinForm.invitationCode}
+                onChange={(e) => setJoinForm((f) => ({ ...f, invitationCode: e.target.value }))}
+                className="input uppercase tracking-widest"
+                placeholder="XXXX-XXXX"
+                maxLength={9}
+                required
+              />
+            </Field>
+            <Field label="Equipo favorito en este grupo (opcional)">
+              <select value={joinForm.favoriteTeamId} onChange={(e) => setJoinForm((f) => ({ ...f, favoriteTeamId: e.target.value }))} className="input">
+                <option value="">— Elige tu equipo —</option>
+                {joinAvailable.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.code})</option>)}
+                {joinTaken.map((t) => <option key={t.id} value="" disabled>{t.name} ({t.code}) — {t.takenBy}</option>)}
+              </select>
+            </Field>
+            <Field label="Pronóstico de campeón 🏆 (opcional)">
+              <select value={joinForm.championPickId} onChange={(e) => setJoinForm((f) => ({ ...f, championPickId: e.target.value }))} className="input">
+                <option value="">— Elige el campeón —</option>
+                {(joinTeams.length > 0 ? joinTeams : allTeams).map((t) => (
+                  <option key={t.id} value={t.id}>{t.name} ({t.code})</option>
+                ))}
+              </select>
+            </Field>
+            <div className="flex gap-2">
+              <button type="submit" disabled={joining} className="flex-1 bg-green-600 hover:bg-green-500 disabled:bg-green-800 text-white py-2 rounded-lg text-sm font-medium">
+                {joining ? "Uniéndose..." : "Unirse al grupo"}
+              </button>
+              <button type="button" onClick={() => { setJoiningGroup(false); setJoinError(""); setJoinForm({ invitationCode: "", favoriteTeamId: "", championPickId: "" }); }} className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 py-2 rounded-lg text-sm font-medium">
+                Cancelar
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button onClick={() => setJoiningGroup(true)} className="w-full border border-dashed border-slate-600 hover:border-slate-500 text-slate-400 hover:text-slate-200 py-3 rounded-xl text-sm transition-colors">
+            + Unirse a otro grupo
+          </button>
+        )}
+      </div>
 
       {/* WhatsApp — admin global o admin de grupo */}
       {(isAdmin || profile?.adminOfCode) && (
@@ -352,8 +396,6 @@ export default function ProfilePage() {
                 : "Todos los participantes"}
             </p>
           </div>
-
-          {/* Estado + botón conectar */}
           <div className="flex items-center gap-3">
             <span className={`w-3 h-3 rounded-full shrink-0 ${waConnected ? "bg-green-500" : "bg-slate-500"}`} />
             <span className="text-sm text-slate-300">
@@ -361,24 +403,16 @@ export default function ProfilePage() {
             </span>
             <div className="ml-auto">
               {!waConnected ? (
-                <button
-                  onClick={waPolling ? stopWaPolling : startWaPolling}
-                  className="px-3 py-1.5 text-sm rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
-                >
+                <button onClick={waPolling ? stopWaPolling : startWaPolling} className="px-3 py-1.5 text-sm rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors">
                   {waPolling ? "Cancelar" : "Conectar"}
                 </button>
               ) : (
-                <button
-                  onClick={startWaPolling}
-                  className="px-3 py-1.5 text-sm rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
-                >
+                <button onClick={startWaPolling} className="px-3 py-1.5 text-sm rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors">
                   Verificar
                 </button>
               )}
             </div>
           </div>
-
-          {/* QR */}
           {waQr && !waConnected && (
             <div className="flex flex-col items-center gap-2">
               <p className="text-xs text-slate-400 text-center">
@@ -388,24 +422,37 @@ export default function ProfilePage() {
               <img src={waQr} alt="QR WhatsApp" className="w-52 h-52 rounded-xl border border-slate-600" />
             </div>
           )}
-
-          {/* Enviar resultados */}
           {waConnected && (
             <div className="border-t border-slate-700 pt-4">
-              <button
-                onClick={sendDailyResults}
-                disabled={notifLoading}
-                className="w-full bg-green-700 hover:bg-green-600 disabled:bg-green-900 text-white py-2.5 rounded-lg font-medium transition-colors"
-              >
+              <button onClick={sendDailyResults} disabled={notifLoading} className="w-full bg-green-700 hover:bg-green-600 disabled:bg-green-900 text-white py-2.5 rounded-lg font-medium transition-colors">
                 {notifLoading ? "Enviando..." : "📱 Enviar resultados del día"}
               </button>
-              {notifResult && (
-                <p className="text-sm text-slate-300 text-center mt-2">{notifResult}</p>
-              )}
+              {notifResult && <p className="text-sm text-slate-300 text-center mt-2">{notifResult}</p>}
             </div>
           )}
         </div>
       )}
+
+      <style jsx>{`
+        .input {
+          width: 100%;
+          background: rgb(15 23 42);
+          border: 1px solid rgb(71 85 105);
+          color: white;
+          border-radius: 0.5rem;
+          padding: 0.625rem 1rem;
+          outline: none;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-300 mb-1.5">{label}</label>
+      {children}
     </div>
   );
 }

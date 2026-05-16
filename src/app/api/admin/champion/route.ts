@@ -40,19 +40,16 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Equipo no encontrado" }, { status: 404 });
   }
 
-  // Award bonus to all users who picked this team as champion
-  const winners = await prisma.user.findMany({
+  // Award bonus to all memberships that picked this team as champion
+  const winningMemberships = await prisma.membership.findMany({
     where: { championPickId: teamId },
     select: { id: true },
   });
 
-  for (const user of winners) {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        bonusPoints: { increment: config.championBonus },
-        totalPoints: { increment: config.championBonus },
-      },
+  for (const m of winningMemberships) {
+    await prisma.membership.update({
+      where: { id: m.id },
+      data: { bonusPoints: { increment: config.championBonus } },
     });
   }
 
@@ -61,5 +58,5 @@ export async function POST(req: Request): Promise<NextResponse> {
     data: { championTeamId: teamId, championBonusGiven: true },
   });
 
-  return NextResponse.json({ ok: true, team: team.name, awarded: winners.length });
+  return NextResponse.json({ ok: true, team: team.name, awarded: winningMemberships.length });
 }

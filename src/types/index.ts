@@ -74,5 +74,4 @@ export interface UserSession {
   name: string;
   email: string;
   phone: string;
-  favoriteTeamId: string | null;
 }

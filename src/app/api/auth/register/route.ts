@@ -27,7 +27,6 @@ export async function POST(req: Request) {
 
     const { name, email, phone, password, favoriteTeamId, championPickId, invitationCode } = parsed.data;
 
-    // Validate invitation code
     const code = await prisma.invitationCode.findUnique({
       where: { code: invitationCode.toUpperCase() },
     });
@@ -65,14 +64,13 @@ export async function POST(req: Request) {
     }
 
     if (favoriteTeamId) {
-      // Scope the uniqueness check to the same invitation code group
-      const teamTaken = await prisma.user.findFirst({
+      const teamTaken = await prisma.membership.findFirst({
         where: { favoriteTeamId, invitationCodeId: code.id },
-        select: { name: true },
+        select: { user: { select: { name: true } } },
       });
       if (teamTaken) {
         return NextResponse.json(
-          { error: `Este equipo ya fue elegido por ${teamTaken.name} en tu grupo. Cada equipo solo puede tener un fanático por grupo.` },
+          { error: `Este equipo ya fue elegido por ${teamTaken.user.name} en tu grupo. Cada equipo solo puede tener un fanático por grupo.` },
           { status: 409 }
         );
       }
@@ -82,7 +80,19 @@ export async function POST(req: Request) {
 
     const [user] = await prisma.$transaction([
       prisma.user.create({
-        data: { name, email, phone, passwordHash, favoriteTeamId, championPickId, invitationCodeId: code.id },
+        data: {
+          name,
+          email,
+          phone,
+          passwordHash,
+          memberships: {
+            create: {
+              invitationCodeId: code.id,
+              favoriteTeamId: favoriteTeamId || null,
+              championPickId: championPickId || null,
+            },
+          },
+        },
         select: { id: true, name: true, email: true },
       }),
       prisma.invitationCode.update({

@@ -23,27 +23,36 @@ export async function PATCH(
 
   const { manualPoints } = parsed.data;
 
-  // Recalcula totalPoints sumando puntos de predicciones + bonusPoints + manualPoints
+  // totalPoints = prediction points + manualPoints (bonus is per-membership, computed at query time)
   const agg = await prisma.prediction.aggregate({
     where: { userId: id, points: { not: null } },
     _sum: { points: true },
   });
   const predictionPoints = agg._sum.points ?? 0;
 
-  const user = await prisma.user.findUnique({
-    where: { id },
-    select: { bonusPoints: true },
-  });
+  const user = await prisma.user.findUnique({ where: { id }, select: { id: true } });
   if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const updated = await prisma.user.update({
     where: { id },
     data: {
       manualPoints,
-      totalPoints: predictionPoints + user.bonusPoints + manualPoints,
+      totalPoints: predictionPoints,
     },
-    select: { id: true, name: true, totalPoints: true, manualPoints: true, bonusPoints: true },
+    select: { id: true, name: true, totalPoints: true, manualPoints: true },
   });
 
-  return NextResponse.json({ user: updated });
+  const bonusAgg = await prisma.membership.aggregate({
+    where: { userId: id },
+    _sum: { bonusPoints: true },
+  });
+  const bonusPoints = bonusAgg._sum.bonusPoints ?? 0;
+
+  return NextResponse.json({
+    user: {
+      ...updated,
+      bonusPoints,
+      totalPoints: updated.totalPoints + updated.manualPoints + bonusPoints,
+    },
+  });
 }

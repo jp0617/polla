@@ -17,13 +17,28 @@ export async function GET(): Promise<NextResponse> {
       email: true,
       phone: true,
       totalPoints: true,
-      bonusPoints: true,
       manualPoints: true,
       isAdmin: true,
       _count: { select: { predictions: true } },
+      memberships: { select: { bonusPoints: true } },
     },
     orderBy: { totalPoints: "desc" },
   });
 
-  return NextResponse.json({ users });
+  const result = users.map((u) => {
+    const bonusPoints = u.memberships.reduce((s, m) => s + m.bonusPoints, 0);
+    return {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      phone: u.phone,
+      totalPoints: u.totalPoints + u.manualPoints + bonusPoints,
+      bonusPoints,
+      manualPoints: u.manualPoints,
+      isAdmin: u.isAdmin,
+      _count: u._count,
+    };
+  });
+
+  return NextResponse.json({ users: result });
 }

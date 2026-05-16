@@ -14,14 +14,21 @@ export default async function DashboardPage() {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
 
-  const [user, todayMatches, standings, liveMatches] = await Promise.all([
+  const [user, todayMatches, totalPlayers, liveMatches] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: {
         name: true,
         totalPoints: true,
-        bonusPoints: true,
-        favoriteTeam: { select: { name: true, crest: true } },
+        manualPoints: true,
+        memberships: {
+          select: {
+            bonusPoints: true,
+            favoriteTeam: { select: { name: true, crest: true } },
+          },
+          orderBy: { joinedAt: "asc" },
+          take: 1,
+        },
       },
     }),
     prisma.match.findMany({
@@ -37,11 +44,29 @@ export default async function DashboardPage() {
     }),
   ]);
 
-  // Get user rank
-  const usersAbove = await prisma.user.count({
-    where: { totalPoints: { gt: user?.totalPoints ?? 0 } },
-  });
-  const userRank = usersAbove + 1;
+  const primaryMembership = user?.memberships[0] ?? null;
+  const bonusPoints = user?.memberships.reduce((s, m) => s + m.bonusPoints, 0) ?? 0;
+  const displayPoints = (user?.totalPoints ?? 0) + (user?.manualPoints ?? 0) + bonusPoints;
+
+  // Rank within primary group, or global if no group
+  let userRank = 1;
+  if (primaryMembership) {
+    // Count members in primary group with higher total
+    const firstMembership = await prisma.membership.findFirst({
+      where: { userId: session.user.id },
+      orderBy: { joinedAt: "asc" },
+      select: { invitationCodeId: true },
+    });
+    if (firstMembership) {
+      const membersAbove = await prisma.membership.count({
+        where: {
+          invitationCodeId: firstMembership.invitationCodeId,
+          user: { totalPoints: { gt: user?.totalPoints ?? 0 } },
+        },
+      });
+      userRank = membersAbove + 1;
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -53,26 +78,26 @@ export default async function DashboardPage() {
         <p className="text-green-200">Mundial 2026 — Polla de pronósticos</p>
 
         <div className="grid grid-cols-3 gap-4 mt-5">
-          <StatCard label="Puntos" value={user?.totalPoints ?? 0} emoji="⭐" />
+          <StatCard label="Puntos" value={displayPoints} emoji="⭐" />
           <StatCard label="Posición" value={`#${userRank}`} emoji="🏆" />
-          <StatCard label="Jugadores" value={standings} emoji="👥" />
+          <StatCard label="Jugadores" value={totalPlayers} emoji="👥" />
         </div>
       </div>
 
-      {/* Favorite team bonus info */}
-      {user?.favoriteTeam && (
+      {/* Primary favorite team */}
+      {primaryMembership?.favoriteTeam && (
         <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 flex items-center gap-3">
-          {user.favoriteTeam.crest && (
+          {primaryMembership.favoriteTeam.crest && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={user.favoriteTeam.crest} alt="" className="w-10 h-10 object-contain" />
+            <img src={primaryMembership.favoriteTeam.crest} alt="" className="w-10 h-10 object-contain" />
           )}
           <div>
             <p className="text-sm text-slate-400">Tu equipo favorito</p>
-            <p className="font-semibold text-white">{user.favoriteTeam.name}</p>
+            <p className="font-semibold text-white">{primaryMembership.favoriteTeam.name}</p>
           </div>
-          {(user.bonusPoints ?? 0) > 0 && (
+          {bonusPoints > 0 && (
             <div className="ml-auto bg-green-900 text-green-300 text-sm px-3 py-1 rounded-full">
-              +{user.bonusPoints} bonus
+              +{bonusPoints} bonus
             </div>
           )}
         </div>
@@ -102,10 +127,7 @@ export default async function DashboardPage() {
               {format(now, "EEEE d 'de' MMMM", { locale: es })}
             </span>
           </h2>
-          <Link
-            href="/matches"
-            className="text-sm text-green-400 hover:text-green-300"
-          >
+          <Link href="/matches" className="text-sm text-green-400 hover:text-green-300">
             Ver todos →
           </Link>
         </div>
@@ -123,18 +145,12 @@ export default async function DashboardPage() {
 
       {/* Quick links */}
       <div className="grid grid-cols-2 gap-3">
-        <Link
-          href="/matches"
-          className="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl p-4 text-center transition-colors"
-        >
+        <Link href="/matches" className="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl p-4 text-center transition-colors">
           <div className="text-2xl mb-1">📋</div>
           <div className="font-medium text-white">Hacer pronósticos</div>
           <div className="text-xs text-slate-400 mt-0.5">Predice los marcadores</div>
         </Link>
-        <Link
-          href="/standings"
-          className="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl p-4 text-center transition-colors"
-        >
+        <Link href="/standings" className="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl p-4 text-center transition-colors">
           <div className="text-2xl mb-1">🏅</div>
           <div className="font-medium text-white">Clasificación</div>
           <div className="text-xs text-slate-400 mt-0.5">Ver tabla de posiciones</div>
@@ -144,15 +160,7 @@ export default async function DashboardPage() {
   );
 }
 
-function StatCard({
-  label,
-  value,
-  emoji,
-}: {
-  label: string;
-  value: number | string;
-  emoji: string;
-}) {
+function StatCard({ label, value, emoji }: { label: string; value: number | string; emoji: string }) {
   return (
     <div className="bg-green-900/50 rounded-xl p-3 text-center">
       <div className="text-xl mb-0.5">{emoji}</div>
@@ -178,19 +186,12 @@ interface MatchCardProps {
 
 function MatchCard({ match, isLive }: MatchCardProps) {
   const kickoffTime = format(new Date(match.kickoff), "HH:mm");
-
   return (
-    <div
-      className={`bg-slate-800 rounded-xl p-4 border ${
-        isLive ? "border-red-700" : "border-slate-700"
-      } flex items-center gap-3`}
-    >
+    <div className={`bg-slate-800 rounded-xl p-4 border ${isLive ? "border-red-700" : "border-slate-700"} flex items-center gap-3`}>
       <TeamDisplay team={match.homeTeam} />
       <div className="flex-1 text-center">
         {match.status === "FINISHED" || isLive ? (
-          <div className="text-xl font-bold text-white">
-            {match.homeScore ?? 0} — {match.awayScore ?? 0}
-          </div>
+          <div className="text-xl font-bold text-white">{match.homeScore ?? 0} — {match.awayScore ?? 0}</div>
         ) : (
           <div className="text-sm text-slate-400">{kickoffTime}</div>
         )}
@@ -203,13 +204,7 @@ function MatchCard({ match, isLive }: MatchCardProps) {
   );
 }
 
-function TeamDisplay({
-  team,
-  align = "left",
-}: {
-  team: { name: string; shortName: string; crest: string | null };
-  align?: "left" | "right";
-}) {
+function TeamDisplay({ team, align = "left" }: { team: { name: string; shortName: string; crest: string | null }; align?: "left" | "right" }) {
   return (
     <div className={`flex items-center gap-2 w-24 ${align === "right" ? "flex-row-reverse" : ""}`}>
       {team.crest ? (
@@ -218,9 +213,7 @@ function TeamDisplay({
       ) : (
         <div className="w-8 h-8 bg-slate-600 rounded-full" />
       )}
-      <span className="text-sm font-medium text-slate-200 truncate">
-        {team.shortName}
-      </span>
+      <span className="text-sm font-medium text-slate-200 truncate">{team.shortName}</span>
     </div>
   );
 }

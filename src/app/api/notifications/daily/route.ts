@@ -4,16 +4,6 @@ import { prisma } from "@/lib/db/client";
 import { sendDailyResultsToAll } from "@/lib/whatsapp/service";
 import { startOfDay, endOfDay } from "date-fns";
 
-type UserRow = {
-  id: string;
-  name: string;
-  phone: string;
-  totalPoints: number;
-  predictions: { points: number | null }[];
-};
-
-type RankRow = { id: string; totalPoints: number };
-
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -23,7 +13,7 @@ export async function POST(req: Request) {
   const userId = session.user.id;
   const isAdmin = (session.user as { isAdmin?: boolean }).isAdmin;
 
-  // Check if user is a code admin — if so, scope to their code's users
+  // Check if user is a code admin — if so, scope to their code's members
   let invitationCodeId: string | null = null;
   if (!isAdmin) {
     const codeAdmin = await prisma.invitationCode.findFirst({
@@ -43,54 +33,53 @@ export async function POST(req: Request) {
   const dayStart = startOfDay(targetDate);
   const dayEnd = endOfDay(targetDate);
 
-  const userWhere = invitationCodeId ? { invitationCodeId } : {};
-
-  const users: UserRow[] = await prisma.user.findMany({
-    where: userWhere,
-    select: {
-      id: true,
-      name: true,
-      phone: true,
-      totalPoints: true,
-      predictions: {
-        where: {
-          status: "SCORED",
-          match: { kickoff: { gte: dayStart, lte: dayEnd } },
+  // Fetch memberships (scoped or global) with user data
+  const memberships = await prisma.membership.findMany({
+    where: invitationCodeId ? { invitationCodeId } : {},
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          totalPoints: true,
+          manualPoints: true,
+          predictions: {
+            where: {
+              status: "SCORED",
+              match: { kickoff: { gte: dayStart, lte: dayEnd } },
+            },
+            select: { points: true },
+          },
         },
-        select: { points: true },
       },
     },
   });
 
-  const usersWithRank: RankRow[] = await prisma.user.findMany({
-    where: userWhere,
-    select: { id: true, totalPoints: true },
-    orderBy: [{ totalPoints: "desc" }],
-  });
-  const rankMap = new Map<string, number>(
-    usersWithRank.map((u: RankRow, idx: number) => [u.id, idx + 1])
-  );
+  // Compute per-group total for ranking
+  const ranked = memberships
+    .map((m) => ({
+      userId: m.user.id,
+      total: m.user.totalPoints + m.user.manualPoints + m.bonusPoints,
+    }))
+    .sort((a, b) => b.total - a.total);
 
-  const results = users.map((user: UserRow) => {
-    const todayPoints = user.predictions.reduce(
-      (sum: number, p: { points: number | null }) => sum + (p.points ?? 0),
-      0
-    );
-    const exactScores = user.predictions.filter(
-      (p: { points: number | null }) => p.points === 5
-    ).length;
+  const rankMap = new Map<string, number>(ranked.map((r, idx) => [r.userId, idx + 1]));
 
+  const results = memberships.map((m) => {
+    const total = m.user.totalPoints + m.user.manualPoints + m.bonusPoints;
+    const todayPoints = m.user.predictions.reduce((s, p) => s + (p.points ?? 0), 0);
+    const exactScores = m.user.predictions.filter((p) => p.points === 5).length;
     return {
-      phone: user.phone,
-      name: user.name,
+      phone: m.user.phone,
+      name: m.user.name,
       exactScores,
       pointsToday: todayPoints,
-      totalPoints: user.totalPoints,
-      rank: rankMap.get(user.id) ?? 0,
+      totalPoints: total,
+      rank: rankMap.get(m.user.id) ?? 0,
     };
   });
 
-  // Messages are sent from the requesting user's own WhatsApp session
   const { sent, failed } = await sendDailyResultsToAll(userId, results);
 
   return NextResponse.json({ success: true, sent, failed, total: results.length });

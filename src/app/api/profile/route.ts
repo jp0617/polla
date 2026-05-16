@@ -4,10 +4,12 @@ import { prisma } from "@/lib/db/client";
 import { z } from "zod";
 
 const updateSchema = z.object({
-  favoriteTeamId: z.string().optional(),
-  championPickId: z.string().nullable().optional(),
   name: z.string().min(2).optional(),
   phone: z.string().min(7).optional(),
+  // per-membership fields require membershipId
+  membershipId: z.string().optional(),
+  favoriteTeamId: z.string().nullable().optional(),
+  championPickId: z.string().nullable().optional(),
 });
 
 export async function GET() {
@@ -24,9 +26,15 @@ export async function GET() {
       email: true,
       phone: true,
       totalPoints: true,
-      bonusPoints: true,
-      favoriteTeam: true,
-      championPick: { select: { id: true, name: true, crest: true, code: true } },
+      manualPoints: true,
+      memberships: {
+        include: {
+          invitationCode: { select: { id: true, code: true, label: true } },
+          favoriteTeam: { select: { id: true, name: true, crest: true, code: true } },
+          championPick: { select: { id: true, name: true, crest: true, code: true } },
+        },
+        orderBy: { joinedAt: "asc" },
+      },
       predictions: {
         where: { status: "SCORED" },
         select: { points: true },
@@ -45,10 +53,18 @@ export async function GET() {
 
   const exactScores = user.predictions.filter((p: { points: number | null }) => p.points === 5).length;
   const correctWinners = user.predictions.filter((p: { points: number | null }) => p.points === 3).length;
+  const totalBonusPoints = user.memberships.reduce((sum, m) => sum + m.bonusPoints, 0);
 
   return NextResponse.json({
-    ...user,
-    predictions: undefined,
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    totalPoints: user.totalPoints + user.manualPoints + totalBonusPoints,
+    predictionPoints: user.totalPoints,
+    manualPoints: user.manualPoints,
+    bonusPoints: totalBonusPoints,
+    memberships: user.memberships,
     stats: { exactScores, correctWinners },
     adminOfCode: codeAdmin ?? null,
   });
@@ -67,28 +83,53 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
   }
 
-  // If changing favorite team, verify it's not taken by another user
-  if (parsed.data.favoriteTeamId) {
-    const teamTaken = await prisma.user.findFirst({
-      where: {
-        favoriteTeamId: parsed.data.favoriteTeamId,
-        NOT: { id: session.user.id },
-      },
-      select: { name: true },
+  const { name, phone, membershipId, favoriteTeamId, championPickId } = parsed.data;
+
+  // Update global user fields
+  if (name || phone) {
+    await prisma.user.update({
+      where: { id: session.user.id },
+      data: { ...(name && { name }), ...(phone && { phone }) },
     });
-    if (teamTaken) {
-      return NextResponse.json(
-        { error: `Este equipo ya fue elegido por ${teamTaken.name}. Cada equipo solo puede tener un fanático.` },
-        { status: 409 }
-      );
-    }
   }
 
-  const user = await prisma.user.update({
-    where: { id: session.user.id },
-    data: parsed.data,
-    select: { id: true, name: true, email: true, phone: true, favoriteTeamId: true, championPickId: true },
-  });
+  // Update membership-specific fields
+  if (membershipId) {
+    const membership = await prisma.membership.findFirst({
+      where: { id: membershipId, userId: session.user.id },
+    });
 
-  return NextResponse.json({ user });
+    if (!membership) {
+      return NextResponse.json({ error: "Membresía no encontrada" }, { status: 404 });
+    }
+
+    if (favoriteTeamId !== undefined) {
+      if (favoriteTeamId) {
+        const teamTaken = await prisma.membership.findFirst({
+          where: {
+            favoriteTeamId,
+            invitationCodeId: membership.invitationCodeId,
+            NOT: { id: membershipId },
+          },
+          select: { user: { select: { name: true } } },
+        });
+        if (teamTaken) {
+          return NextResponse.json(
+            { error: `Este equipo ya fue elegido por ${teamTaken.user.name} en este grupo.` },
+            { status: 409 }
+          );
+        }
+      }
+    }
+
+    await prisma.membership.update({
+      where: { id: membershipId },
+      data: {
+        ...(favoriteTeamId !== undefined && { favoriteTeamId: favoriteTeamId || null }),
+        ...(championPickId !== undefined && { championPickId: championPickId || null }),
+      },
+    });
+  }
+
+  return NextResponse.json({ ok: true });
 }

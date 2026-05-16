@@ -25,13 +25,12 @@ export async function PATCH(
 
   const { adminId } = parsed.data;
 
-  // Verify the user belongs to this invitation code (or adminId is null)
+  // Verify the user belongs to this invitation code via Membership
   if (adminId !== null) {
-    const user = await prisma.user.findUnique({
-      where: { id: adminId },
-      select: { invitationCodeId: true },
+    const membership = await prisma.membership.findUnique({
+      where: { userId_invitationCodeId: { userId: adminId, invitationCodeId: id } },
     });
-    if (!user || user.invitationCodeId !== id) {
+    if (!membership) {
       return NextResponse.json(
         { error: "El usuario no pertenece a este código" },
         { status: 400 }
@@ -44,11 +43,20 @@ export async function PATCH(
     data: { adminId },
     include: {
       admin: { select: { id: true, name: true, email: true } },
-      users: { select: { id: true, name: true, email: true, createdAt: true } },
+      memberships: {
+        include: { user: { select: { id: true, name: true, email: true, createdAt: true } } },
+        orderBy: { joinedAt: "asc" },
+      },
     },
   });
 
-  return NextResponse.json({ code });
+  // Flatten to the shape the UI expects
+  const result = {
+    ...code,
+    users: code.memberships.map((m) => ({ ...m.user })),
+  };
+
+  return NextResponse.json({ code: result });
 }
 
 export async function DELETE(
@@ -71,9 +79,8 @@ export async function DELETE(
     return NextResponse.json({ error: "Código no encontrado" }, { status: 404 });
   }
 
-  // Eliminar usuarios del código (sus predicciones se borran en cascada)
-  await prisma.user.deleteMany({ where: { invitationCodeId: id } });
-
+  // Delete memberships only; users keep their account and predictions
+  // (Cascade on InvitationCode → Membership handles this)
   await prisma.invitationCode.delete({ where: { id } });
 
   return NextResponse.json({ ok: true });
