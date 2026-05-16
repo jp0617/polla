@@ -193,8 +193,8 @@ async function detectPhaseAdvancesForMatch(
           await prisma.user.update({
             where: { id: user.id },
             data: {
-              totalPoints: { increment: scoringConfig.bonusPhaseAdvance },
-              bonusPoints: { increment: scoringConfig.bonusPhaseAdvance },
+              totalPoints: { increment: bonusPoints },
+              bonusPoints: { increment: bonusPoints },
             },
           });
           bonusCount++;
