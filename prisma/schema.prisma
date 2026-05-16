@@ -13,7 +13,9 @@ model User {
   phone            String           @unique
   passwordHash     String
   favoriteTeamId   String?
-  favoriteTeam     Team?            @relation(fields: [favoriteTeamId], references: [id])
+  favoriteTeam     Team?            @relation("FavoriteTeam", fields: [favoriteTeamId], references: [id])
+  championPickId   String?
+  championPick     Team?            @relation("ChampionPick", fields: [championPickId], references: [id])
   predictions      Prediction[]
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
@@ -53,7 +55,8 @@ model Team {
   eliminated    Boolean        @default(false)
   homeMatches   Match[]        @relation("HomeTeam")
   awayMatches   Match[]        @relation("AwayTeam")
-  favoritedBy   User[]
+  favoritedBy   User[]         @relation("FavoriteTeam")
+  championPicks User[]         @relation("ChampionPick")
   phaseAdvances PhaseAdvance[]
 }
 
@@ -107,13 +110,16 @@ model PhaseAdvance {
 }
 
 model ScoringConfig {
-  id                String   @id @default("singleton")
-  exactScore        Int      @default(5)
-  correctWinner     Int      @default(3)
-  correctDraw       Int      @default(2)
-  bonusPhaseAdvance Int      @default(2)
-  lockMinutes       Int      @default(5)
-  updatedAt         DateTime @updatedAt
+  id                 String   @id @default("singleton")
+  exactScore         Int      @default(5)
+  correctWinner      Int      @default(3)
+  correctDraw        Int      @default(2)
+  bonusPhaseAdvance  Int      @default(2)
+  championBonus      Int      @default(10)
+  lockMinutes        Int      @default(5)
+  championTeamId     String?
+  championBonusGiven Boolean  @default(false)
+  updatedAt          DateTime @updatedAt
 }
 
 

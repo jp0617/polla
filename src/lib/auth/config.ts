@@ -72,7 +72,7 @@ export const authConfig: NextAuthConfig = {
           name: user.name,
           email: user.email,
           phone: user.phone,
-          favoriteTeamId: user.favoriteTeamId,
+          favoriteTeamId: user.favoriteTeamId ?? undefined,
           isAdmin: user.isAdmin,
         };
       },

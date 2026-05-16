@@ -7,7 +7,10 @@ interface ScoringConfig {
   correctWinner: number;
   correctDraw: number;
   bonusPhaseAdvance: number;
+  championBonus: number;
   lockMinutes: number;
+  championTeamId: string | null;
+  championBonusGiven: boolean;
 }
 
 interface AdminUser {
@@ -42,8 +45,12 @@ export default function AdminPage() {
   const [saved, setSaved] = useState<Record<string, boolean>>({});
 
   const [scoring, setScoring] = useState<ScoringConfig>({
-    exactScore: 5, correctWinner: 3, correctDraw: 2, bonusPhaseAdvance: 2, lockMinutes: 5,
+    exactScore: 5, correctWinner: 3, correctDraw: 2, bonusPhaseAdvance: 2, championBonus: 10, lockMinutes: 5,
+    championTeamId: null, championBonusGiven: false,
   });
+  const [championTeamId, setChampionTeamId] = useState("");
+  const [awardingChampion, setAwardingChampion] = useState(false);
+  const [championResult, setChampionResult] = useState<string | null>(null);
   const [scoringSaving, setScoringSaving] = useState(false);
   const [scoringSaved, setScoringSaved] = useState(false);
 
@@ -53,6 +60,8 @@ export default function AdminPage() {
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
   const [savingAdmin, setSavingAdmin] = useState<Record<string, boolean>>({});
   const [deletingCode, setDeletingCode] = useState<Record<string, boolean>>({});
+
+  const [teams, setTeams] = useState<{ id: string; name: string; crest: string | null }[]>([]);
 
   const [waConnected, setWaConnected] = useState(false);
   const [waQr, setWaQr] = useState<string | null>(null);
@@ -66,13 +75,18 @@ export default function AdminPage() {
       fetch("/api/admin/users").then((r) => r.json()),
       fetch("/api/admin/scoring").then((r) => r.json()),
       fetch("/api/admin/invitation-codes").then((r) => r.json()),
-    ]).then(([usersData, scoringData, codesData]) => {
+      fetch("/api/teams").then((r) => r.json()),
+    ]).then(([usersData, scoringData, codesData, teamsData]) => {
       setUsers(usersData.users ?? []);
       const initial: Record<string, string> = {};
       for (const u of usersData.users ?? []) initial[u.id] = String(u.manualPoints);
       setEditing(initial);
-      if (scoringData.config) setScoring({ exactScore: 5, correctWinner: 3, correctDraw: 2, bonusPhaseAdvance: 2, lockMinutes: 5, ...scoringData.config });
+      if (scoringData.config) {
+        setScoring({ exactScore: 5, correctWinner: 3, correctDraw: 2, bonusPhaseAdvance: 2, championBonus: 10, lockMinutes: 5, championTeamId: null, championBonusGiven: false, ...scoringData.config });
+        setChampionTeamId(scoringData.config.championTeamId ?? "");
+      }
       setCodes(codesData.codes ?? []);
+      setTeams(teamsData.teams ?? []);
       setLoading(false);
     });
   }, []);
@@ -113,6 +127,25 @@ export default function AdminPage() {
       setSendResult({ sent: data.sent, failed: data.failed });
     }
     setSendingResults(false);
+  }
+
+  async function awardChampion() {
+    if (!championTeamId) return;
+    setAwardingChampion(true);
+    setChampionResult(null);
+    const res = await fetch("/api/admin/champion", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId: championTeamId }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setChampionResult(`✓ ${data.team} declarado campeón · ${data.awarded} usuario(s) recibieron +${scoring.championBonus} pts`);
+      setScoring((s) => ({ ...s, championBonusGiven: true, championTeamId }));
+    } else {
+      setChampionResult(`Error: ${data.error}`);
+    }
+    setAwardingChampion(false);
   }
 
   async function saveScoring() {
@@ -285,12 +318,13 @@ export default function AdminPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {(
               [
-                { key: "exactScore", label: "Marcador exacto" },
-                { key: "correctWinner", label: "Ganador correcto" },
-                { key: "correctDraw", label: "Empate correcto" },
-                { key: "bonusPhaseAdvance", label: "Bonus equipo favorito" },
-                { key: "lockMinutes", label: "Cierre antes del partido" },
-              ] as { key: keyof ScoringConfig; label: string }[]
+                { key: "exactScore" as const, label: "Marcador exacto" },
+                { key: "correctWinner" as const, label: "Ganador correcto" },
+                { key: "correctDraw" as const, label: "Empate correcto" },
+                { key: "bonusPhaseAdvance" as const, label: "Bonus fase" },
+                { key: "championBonus" as const, label: "Bonus campeón" },
+                { key: "lockMinutes" as const, label: "Cierre antes del partido" },
+              ] as { key: "exactScore" | "correctWinner" | "correctDraw" | "bonusPhaseAdvance" | "championBonus" | "lockMinutes"; label: string }[]
             ).map(({ key, label }) => (
               <div key={key} className="flex flex-col gap-1">
                 <label className="text-xs text-slate-400 font-medium">{label}</label>
@@ -318,6 +352,51 @@ export default function AdminPage() {
               {scoringSaved ? "✓ Guardado" : scoringSaving ? "Guardando..." : "Guardar puntos"}
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Campeón */}
+      <div>
+        <h2 className="text-xl font-bold text-white">Campeón del torneo</h2>
+        <p className="text-slate-400 text-sm mt-1 mb-4">
+          Declara el equipo campeón para otorgar el bonus de {scoring.championBonus} pts a sus fanáticos. Esta acción solo se puede ejecutar una vez.
+        </p>
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 space-y-4">
+          {scoring.championBonusGiven ? (
+            <p className="text-green-400 font-medium">
+              ✓ Bonus de campeón ya otorgado a los fanáticos de {teams.find((t) => t.id === scoring.championTeamId)?.name ?? "—"}
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-slate-400">Equipo campeón</label>
+                <select
+                  value={championTeamId}
+                  onChange={(e) => setChampionTeamId(e.target.value)}
+                  className="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500 w-56"
+                >
+                  <option value="">— Seleccionar equipo —</option>
+                  {teams.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                onClick={() => {
+                  if (confirm(`¿Declarar campeón a ${teams.find((t) => t.id === championTeamId)?.name}? Se otorgarán ${scoring.championBonus} pts. Esta acción no se puede deshacer.`)) {
+                    awardChampion();
+                  }
+                }}
+                disabled={!championTeamId || awardingChampion}
+                className="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+              >
+                {awardingChampion ? "Otorgando..." : "🏆 Declarar campeón"}
+              </button>
+            </div>
+          )}
+          {championResult && (
+            <p className="text-sm text-slate-300">{championResult}</p>
+          )}
         </div>
       </div>
 

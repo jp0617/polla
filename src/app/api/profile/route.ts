@@ -5,6 +5,7 @@ import { z } from "zod";
 
 const updateSchema = z.object({
   favoriteTeamId: z.string().optional(),
+  championPickId: z.string().nullable().optional(),
   name: z.string().min(2).optional(),
   phone: z.string().min(7).optional(),
 });
@@ -25,6 +26,7 @@ export async function GET() {
       totalPoints: true,
       bonusPoints: true,
       favoriteTeam: true,
+      championPick: { select: { id: true, name: true, crest: true, code: true } },
       predictions: {
         where: { status: "SCORED" },
         select: { points: true },
@@ -85,7 +87,7 @@ export async function PATCH(req: Request) {
   const user = await prisma.user.update({
     where: { id: session.user.id },
     data: parsed.data,
-    select: { id: true, name: true, email: true, phone: true, favoriteTeamId: true },
+    select: { id: true, name: true, email: true, phone: true, favoriteTeamId: true, championPickId: true },
   });
 
   return NextResponse.json({ user });
