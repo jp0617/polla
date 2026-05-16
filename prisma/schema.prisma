@@ -122,7 +122,6 @@ model ScoringConfig {
   updatedAt          DateTime @updatedAt
 }
 
-
 enum MatchStatus {
   SCHEDULED
   IN_PLAY

@@ -308,7 +308,7 @@ export default function ProfilePage() {
               ))}
             </select>
             <p className="text-xs text-slate-500 mt-1">
-              Ganas puntos extra si tu equipo gana el torneo. Varios jugadores pueden elegir el mismo equipo.
+              Ganas puntos extra si tu equipo gana el torneo. Varios jugadores pueden elegir el mismo.
             </p>
           </div>
 
