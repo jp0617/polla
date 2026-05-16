@@ -9,6 +9,7 @@ const registerSchema = z.object({
   phone: z.string().min(7),
   password: z.string().min(6),
   favoriteTeamId: z.string().optional(),
+  championPickId: z.string().optional(),
   invitationCode: z.string().min(1, "El código de invitación es requerido"),
 });
 
@@ -24,7 +25,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { name, email, phone, password, favoriteTeamId, invitationCode } = parsed.data;
+    const { name, email, phone, password, favoriteTeamId, championPickId, invitationCode } = parsed.data;
 
     // Validate invitation code
     const code = await prisma.invitationCode.findUnique({
@@ -81,7 +82,7 @@ export async function POST(req: Request) {
 
     const [user] = await prisma.$transaction([
       prisma.user.create({
-        data: { name, email, phone, passwordHash, favoriteTeamId, invitationCodeId: code.id },
+        data: { name, email, phone, passwordHash, favoriteTeamId, championPickId, invitationCodeId: code.id },
         select: { id: true, name: true, email: true },
       }),
       prisma.invitationCode.update({

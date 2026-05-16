@@ -20,6 +20,7 @@ export default function RegisterPage() {
     phone: "",
     password: "",
     favoriteTeamId: "",
+    championPickId: "",
     invitationCode: "",
   });
   const [teams, setTeams] = useState<Team[]>([]);
@@ -182,6 +183,25 @@ export default function RegisterPage() {
                 : "Ingresa tu código primero para ver la disponibilidad de tu grupo. "}
               Si tu equipo avanza de fase, ganas{" "}
               <span className="text-purple-400 font-medium">+2 puntos</span> automáticamente.
+            </p>
+          </Field>
+
+          <Field label="Pronóstico de campeón 🏆 (opcional)">
+            <select
+              name="championPickId"
+              value={form.championPickId}
+              onChange={handleChange}
+              className="input"
+            >
+              <option value="">— Elige el campeón —</option>
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({t.code})
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-400 mt-1">
+              Ganas puntos extra si tu equipo gana el torneo. Varios jugadores pueden elegir el mismo.
             </p>
           </Field>
 
