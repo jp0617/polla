@@ -31,11 +31,21 @@ export async function GET(): Promise<NextResponse> {
     orderBy: { createdAt: "desc" },
     include: {
       admin: { select: { id: true, name: true, email: true } },
-      users: { select: { id: true, name: true, email: true, createdAt: true } },
+      memberships: {
+        include: { user: { select: { id: true, name: true, email: true, createdAt: true } } },
+        orderBy: { joinedAt: "asc" },
+      },
     },
   });
 
-  return NextResponse.json({ codes });
+  // Flatten memberships → users for the admin UI
+  const result = codes.map((c) => ({
+    ...c,
+    users: c.memberships.map((m) => m.user),
+    memberships: undefined,
+  }));
+
+  return NextResponse.json({ codes: result });
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
