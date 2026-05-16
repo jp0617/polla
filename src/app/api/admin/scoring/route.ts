@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
 import { getScoringConfig } from "@/lib/scoring/config";
+import type { Session } from "next-auth";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
-function isAdmin(session: Awaited<ReturnType<typeof auth>>) {
+function isAdmin(session: Session | null) {
   return (session?.user as { isAdmin?: boolean })?.isAdmin;
 }
 

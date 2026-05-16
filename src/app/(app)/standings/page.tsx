@@ -10,7 +10,6 @@ interface LeaderboardEntry {
   bonusPoints: number;
   exactScores: number;
   correctWinners: number;
-  correctDraws: number;
   favoriteTeam: { name: string; crest: string | null; code: string } | null;
   isCurrentUser: boolean;
 }

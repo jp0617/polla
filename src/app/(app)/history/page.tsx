@@ -40,7 +40,6 @@ export default function HistoryPage() {
   const totalPoints = scored.reduce((s, p) => s + (p.points ?? 0), 0);
   const exactCount = scored.filter((p) => p.points === 5).length;
   const winnerCount = scored.filter((p) => p.points === 3).length;
-  const drawCount = scored.filter((p) => p.points === 1).length;
   const missCount = scored.filter((p) => p.points === 0).length;
 
   const filtered = predictions.filter((p) => {
@@ -122,8 +121,6 @@ function PredictionCard({ prediction: pred }: { prediction: Prediction }) {
       ? "bg-yellow-900 text-yellow-300"
       : pred.points === 3
       ? "bg-green-900 text-green-300"
-      : pred.points === 1
-      ? "bg-blue-900 text-blue-300"
       : pred.points === 0
       ? "bg-slate-700 text-slate-400"
       : "bg-slate-700 text-slate-500";
@@ -133,8 +130,6 @@ function PredictionCard({ prediction: pred }: { prediction: Prediction }) {
       ? "Exacto ⭐"
       : pred.points === 3
       ? "Ganador ✓"
-      : pred.points === 1
-      ? "Empate ✓"
       : pred.points === 0
       ? "Fallado ✗"
       : "Pendiente";

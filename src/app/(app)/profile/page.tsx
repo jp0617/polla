@@ -19,7 +19,7 @@ interface Profile {
   totalPoints: number;
   bonusPoints: number;
   favoriteTeam: { id: string; name: string; crest: string | null; code: string } | null;
-  stats: { exactScores: number; correctWinners: number; correctDraws: number };
+  stats: { exactScores: number; correctWinners: number };
 }
 
 export default function ProfilePage() {

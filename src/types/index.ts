@@ -55,7 +55,6 @@ export interface ScoringResult {
   breakdown: {
     exactScore: boolean;
     correctWinner: boolean;
-    correctDraw: boolean;
     bonusTeam: boolean;
   };
 }

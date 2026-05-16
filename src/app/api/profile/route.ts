@@ -38,12 +38,11 @@ export async function GET() {
 
   const exactScores = user.predictions.filter((p: { points: number | null }) => p.points === 5).length;
   const correctWinners = user.predictions.filter((p: { points: number | null }) => p.points === 3).length;
-  const correctDraws = user.predictions.filter((p: { points: number | null }) => p.points === 1).length;
 
   return NextResponse.json({
     ...user,
     predictions: undefined,
-    stats: { exactScores, correctWinners, correctDraws },
+    stats: { exactScores, correctWinners },
   });
 }
 
