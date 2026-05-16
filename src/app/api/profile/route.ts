@@ -36,6 +36,11 @@ export async function GET() {
     return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
   }
 
+  const codeAdmin = await prisma.invitationCode.findFirst({
+    where: { adminId: session.user.id },
+    select: { id: true, label: true },
+  });
+
   const exactScores = user.predictions.filter((p: { points: number | null }) => p.points === 5).length;
   const correctWinners = user.predictions.filter((p: { points: number | null }) => p.points === 3).length;
 
@@ -43,6 +48,7 @@ export async function GET() {
     ...user,
     predictions: undefined,
     stats: { exactScores, correctWinners },
+    adminOfCode: codeAdmin ?? null,
   });
 }
 

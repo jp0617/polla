@@ -7,19 +7,37 @@ import { Boom } from "@hapi/boom";
 import path from "path";
 import QRCode from "qrcode";
 
-const AUTH_FOLDER = path.join(process.cwd(), ".whatsapp-session");
+const AUTH_FOLDER_BASE = path.join(process.cwd(), ".whatsapp-sessions");
 
-let sock: WASocket | null = null;
-let qrDataUrl: string | null = null;
-let isConnected = false;
-let initPromise: Promise<WASocket> | null = null;
+interface SessionState {
+  sock: WASocket | null;
+  qrDataUrl: string | null;
+  isConnected: boolean;
+  initPromise: Promise<WASocket> | null;
+}
 
-async function init(): Promise<WASocket> {
-  const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
+const sessions = new Map<string, SessionState>();
+
+function getSession(userId: string): SessionState {
+  if (!sessions.has(userId)) {
+    sessions.set(userId, {
+      sock: null,
+      qrDataUrl: null,
+      isConnected: false,
+      initPromise: null,
+    });
+  }
+  return sessions.get(userId)!;
+}
+
+async function init(userId: string): Promise<WASocket> {
+  const authFolder = path.join(AUTH_FOLDER_BASE, userId);
+  const session = getSession(userId);
+  const { state, saveCreds } = await useMultiFileAuthState(authFolder);
 
   const client = makeWASocket({
     auth: state,
-    printQRInTerminal: true,
+    printQRInTerminal: false,
     browser: ["Polla Mundialista", "Chrome", "1.0"],
   });
 
@@ -27,49 +45,54 @@ async function init(): Promise<WASocket> {
 
   client.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
-      qrDataUrl = await QRCode.toDataURL(qr);
-      isConnected = false;
+      session.qrDataUrl = await QRCode.toDataURL(qr);
+      session.isConnected = false;
     }
     if (connection === "open") {
-      isConnected = true;
-      qrDataUrl = null;
-      console.log("WhatsApp conectado");
+      session.isConnected = true;
+      session.qrDataUrl = null;
+      console.log(`[WA] Conectado: ${userId}`);
     }
     if (connection === "close") {
-      isConnected = false;
+      session.isConnected = false;
       const code = (lastDisconnect?.error as Boom)?.output?.statusCode;
       if (code !== DisconnectReason.loggedOut) {
-        sock = null;
-        initPromise = null;
-        getWhatsAppClient();
+        session.sock = null;
+        session.initPromise = null;
+        getWhatsAppClient(userId);
       } else {
-        console.warn("WhatsApp desconectado (logout). Escanea el QR nuevamente.");
-        sock = null;
-        initPromise = null;
+        console.warn(`[WA] Logout: ${userId}`);
+        session.sock = null;
+        session.initPromise = null;
       }
     }
   });
 
-  sock = client;
+  session.sock = client;
   return client;
 }
 
-export function getWhatsAppClient(): Promise<WASocket> {
-  if (sock && isConnected) return Promise.resolve(sock);
-  if (!initPromise) initPromise = init();
-  return initPromise;
+export function getWhatsAppClient(userId: string): Promise<WASocket> {
+  const session = getSession(userId);
+  if (session.sock && session.isConnected) return Promise.resolve(session.sock);
+  if (!session.initPromise) session.initPromise = init(userId);
+  return session.initPromise;
 }
 
-export function getQRDataUrl(): string | null {
-  return qrDataUrl;
+export function getQRDataUrl(userId: string): string | null {
+  return getSession(userId).qrDataUrl;
 }
 
-export function getConnectionStatus(): boolean {
-  return isConnected;
+export function getConnectionStatus(userId: string): boolean {
+  return getSession(userId).isConnected;
 }
 
-export async function sendWhatsAppMessage(to: string, body: string): Promise<void> {
-  const client = await getWhatsAppClient();
+export async function sendWhatsAppMessage(
+  userId: string,
+  to: string,
+  body: string
+): Promise<void> {
+  const client = await getWhatsAppClient(userId);
   const jid = to.replace(/\D/g, "") + "@s.whatsapp.net";
   await client.sendMessage(jid, { text: body });
 }
@@ -90,6 +113,7 @@ export function buildDailyResultMessage(data: {
 }
 
 export async function sendDailyResultsToAll(
+  senderId: string,
   results: Array<{
     phone: string;
     name: string;
@@ -105,10 +129,10 @@ export async function sendDailyResultsToAll(
   for (const result of results) {
     try {
       const message = buildDailyResultMessage(result);
-      await sendWhatsAppMessage(result.phone, message);
+      await sendWhatsAppMessage(senderId, result.phone, message);
       sent++;
     } catch (err) {
-      console.error(`Failed to send WhatsApp to ${result.phone}:`, err);
+      console.error(`[WA] Failed to send to ${result.phone}:`, err);
       failed++;
     }
   }

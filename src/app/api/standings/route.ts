@@ -9,8 +9,22 @@ export async function GET() {
   }
 
   const userId = session.user.id;
+  const isAdmin = (session.user as { isAdmin?: boolean }).isAdmin;
+
+  // Scope standings to the user's invitation code group; global admin sees everyone
+  let codeFilter: { invitationCodeId: string } | Record<string, never> = {};
+  if (!isAdmin) {
+    const me = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { invitationCodeId: true },
+    });
+    if (me?.invitationCodeId) {
+      codeFilter = { invitationCodeId: me.invitationCodeId };
+    }
+  }
 
   const users = await prisma.user.findMany({
+    where: codeFilter,
     select: {
       id: true,
       name: true,

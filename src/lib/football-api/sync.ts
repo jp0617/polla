@@ -136,12 +136,13 @@ export async function syncMatches(): Promise<{
     bonusCount += bonuses;
   }
 
-  // Lock predictions for matches starting within 5 minutes
-  const fiveMinutesFromNow = new Date(Date.now() + 5 * 60 * 1000);
+  // Lock predictions based on configurable lockMinutes
+  const lockMs = (scoringConfig.lockMinutes ?? 5) * 60 * 1000;
+  const lockCutoff = new Date(Date.now() + lockMs);
   const matchesToLock = await prisma.match.findMany({
     where: {
       status: "SCHEDULED",
-      kickoff: { lte: fiveMinutesFromNow },
+      kickoff: { lte: lockCutoff },
     },
   });
 

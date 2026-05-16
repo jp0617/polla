@@ -3,12 +3,14 @@ import { ScoringResult } from "@/types";
 export interface ScoringPoints {
   exactScore: number;
   correctWinner: number;
+  correctDraw: number;
   bonusPhaseAdvance: number;
 }
 
 export const DEFAULT_POINTS: ScoringPoints = {
   exactScore: 5,
   correctWinner: 3,
+  correctDraw: 2,
   bonusPhaseAdvance: 2,
 };
 
@@ -23,10 +25,12 @@ export function scoreMatch(
   const predictedWinner = getWinner(predicted.home, predicted.away);
   const actualWinner = getWinner(actual.home, actual.away);
   const correctWinner = !exactScore && predictedWinner === actualWinner && actualWinner !== "DRAW";
+  const correctDraw = !exactScore && predictedWinner === "DRAW" && actualWinner === "DRAW";
 
   let pts = 0;
   if (exactScore) pts = points.exactScore;
   else if (correctWinner) pts = points.correctWinner;
+  else if (correctDraw) pts = points.correctDraw;
 
   return {
     points: pts,
@@ -40,8 +44,8 @@ function getWinner(home: number, away: number): "HOME" | "AWAY" | "DRAW" {
   return "DRAW";
 }
 
-export function isPredictionLocked(kickoff: Date): boolean {
+export function isPredictionLocked(kickoff: Date, lockMinutes = 5): boolean {
   const now = new Date();
-  const lockTime = new Date(kickoff.getTime() - 5 * 60 * 1000);
+  const lockTime = new Date(kickoff.getTime() - lockMinutes * 60 * 1000);
   return now >= lockTime;
 }

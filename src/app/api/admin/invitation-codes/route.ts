@@ -30,6 +30,7 @@ export async function GET(): Promise<NextResponse> {
   const codes = await prisma.invitationCode.findMany({
     orderBy: { createdAt: "desc" },
     include: {
+      admin: { select: { id: true, name: true, email: true } },
       users: { select: { id: true, name: true, email: true, createdAt: true } },
     },
   });
