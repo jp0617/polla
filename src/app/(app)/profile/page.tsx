@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 
 interface Team {
@@ -20,6 +20,7 @@ interface Profile {
   bonusPoints: number;
   favoriteTeam: { id: string; name: string; crest: string | null; code: string } | null;
   stats: { exactScores: number; correctWinners: number };
+  adminOfCode: { id: string; label: string | null } | null;
 }
 
 export default function ProfilePage() {
@@ -34,6 +35,11 @@ export default function ProfilePage() {
   const [success, setSuccess] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
   const [notifResult, setNotifResult] = useState<string | null>(null);
+
+  const [waConnected, setWaConnected] = useState(false);
+  const [waQr, setWaQr] = useState<string | null>(null);
+  const [waPolling, setWaPolling] = useState(false);
+  const waIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     loadData();
@@ -76,6 +82,33 @@ export default function ProfilePage() {
     setEditing(false);
     loadData();
     setTimeout(() => setSuccess(false), 3000);
+  }
+
+  async function pollWaStatus() {
+    const res = await fetch("/api/whatsapp/status");
+    if (!res.ok) return;
+    const data = await res.json();
+    setWaConnected(data.connected);
+    setWaQr(data.qr ?? null);
+    return data.connected as boolean;
+  }
+
+  function startWaPolling() {
+    if (waIntervalRef.current) return;
+    setWaPolling(true);
+    pollWaStatus();
+    waIntervalRef.current = setInterval(async () => {
+      const connected = await pollWaStatus();
+      if (connected) stopWaPolling();
+    }, 4000);
+  }
+
+  function stopWaPolling() {
+    if (waIntervalRef.current) {
+      clearInterval(waIntervalRef.current);
+      waIntervalRef.current = null;
+    }
+    setWaPolling(false);
   }
 
   async function sendDailyResults() {
@@ -261,23 +294,71 @@ export default function ProfilePage() {
         </button>
       )}
 
-      {/* WhatsApp notifications — solo admin */}
-      {isAdmin && <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 space-y-3">
-        <h3 className="font-semibold text-white">Notificaciones WhatsApp</h3>
-        <p className="text-sm text-slate-400">
-          Envía un resumen de resultados del día a todos los participantes vía WhatsApp.
-        </p>
-        <button
-          onClick={sendDailyResults}
-          disabled={notifLoading}
-          className="w-full bg-green-700 hover:bg-green-600 disabled:bg-green-900 text-white py-2.5 rounded-lg font-medium transition-colors"
-        >
-          {notifLoading ? "Enviando..." : "📱 Enviar resultados del día"}
-        </button>
-        {notifResult && (
-          <p className="text-sm text-slate-300 text-center">{notifResult}</p>
-        )}
-      </div>}
+      {/* WhatsApp — admin global o admin de grupo */}
+      {(isAdmin || profile?.adminOfCode) && (
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 space-y-4">
+          <div>
+            <h3 className="font-semibold text-white">WhatsApp</h3>
+            <p className="text-sm text-slate-400 mt-0.5">
+              {profile?.adminOfCode
+                ? `Grupo: ${profile.adminOfCode.label ?? profile.adminOfCode.id}`
+                : "Todos los participantes"}
+            </p>
+          </div>
+
+          {/* Estado + botón conectar */}
+          <div className="flex items-center gap-3">
+            <span className={`w-3 h-3 rounded-full shrink-0 ${waConnected ? "bg-green-500" : "bg-slate-500"}`} />
+            <span className="text-sm text-slate-300">
+              {waConnected ? "Conectado" : waPolling ? "Esperando escaneo del QR..." : "Desconectado"}
+            </span>
+            <div className="ml-auto">
+              {!waConnected ? (
+                <button
+                  onClick={waPolling ? stopWaPolling : startWaPolling}
+                  className="px-3 py-1.5 text-sm rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
+                >
+                  {waPolling ? "Cancelar" : "Conectar"}
+                </button>
+              ) : (
+                <button
+                  onClick={startWaPolling}
+                  className="px-3 py-1.5 text-sm rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
+                >
+                  Verificar
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* QR */}
+          {waQr && !waConnected && (
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-xs text-slate-400 text-center">
+                Abrí WhatsApp → Dispositivos vinculados → Vincular un dispositivo
+              </p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={waQr} alt="QR WhatsApp" className="w-52 h-52 rounded-xl border border-slate-600" />
+            </div>
+          )}
+
+          {/* Enviar resultados */}
+          {waConnected && (
+            <div className="border-t border-slate-700 pt-4">
+              <button
+                onClick={sendDailyResults}
+                disabled={notifLoading}
+                className="w-full bg-green-700 hover:bg-green-600 disabled:bg-green-900 text-white py-2.5 rounded-lg font-medium transition-colors"
+              >
+                {notifLoading ? "Enviando..." : "📱 Enviar resultados del día"}
+              </button>
+              {notifResult && (
+                <p className="text-sm text-slate-300 text-center mt-2">{notifResult}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

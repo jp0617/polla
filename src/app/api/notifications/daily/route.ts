@@ -16,8 +16,24 @@ type RankRow = { id: string; totalPoints: number };
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const userId = session.user.id;
+  const isAdmin = (session.user as { isAdmin?: boolean }).isAdmin;
+
+  // Check if user is a code admin — if so, scope to their code's users
+  let invitationCodeId: string | null = null;
+  if (!isAdmin) {
+    const codeAdmin = await prisma.invitationCode.findFirst({
+      where: { adminId: userId },
+      select: { id: true },
+    });
+    if (!codeAdmin) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+    }
+    invitationCodeId = codeAdmin.id;
   }
 
   const body = await req.json().catch(() => ({}));
@@ -27,7 +43,10 @@ export async function POST(req: Request) {
   const dayStart = startOfDay(targetDate);
   const dayEnd = endOfDay(targetDate);
 
+  const userWhere = invitationCodeId ? { invitationCodeId } : {};
+
   const users: UserRow[] = await prisma.user.findMany({
+    where: userWhere,
     select: {
       id: true,
       name: true,
@@ -44,6 +63,7 @@ export async function POST(req: Request) {
   });
 
   const usersWithRank: RankRow[] = await prisma.user.findMany({
+    where: userWhere,
     select: { id: true, totalPoints: true },
     orderBy: [{ totalPoints: "desc" }],
   });
@@ -70,7 +90,8 @@ export async function POST(req: Request) {
     };
   });
 
-  const { sent, failed } = await sendDailyResultsToAll(results);
+  // Messages are sent from the requesting user's own WhatsApp session
+  const { sent, failed } = await sendDailyResultsToAll(userId, results);
 
   return NextResponse.json({ success: true, sent, failed, total: results.length });
 }

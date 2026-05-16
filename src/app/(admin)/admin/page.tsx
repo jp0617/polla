@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface ScoringConfig {
   exactScore: number;
   correctWinner: number;
+  correctDraw: number;
   bonusPhaseAdvance: number;
+  lockMinutes: number;
 }
 
 interface AdminUser {
@@ -28,6 +30,7 @@ interface InvitationCode {
   uses: number;
   expiresAt: string | null;
   createdAt: string;
+  admin: { id: string; name: string; email: string } | null;
   users: { id: string; name: string; email: string; createdAt: string }[];
 }
 
@@ -39,7 +42,7 @@ export default function AdminPage() {
   const [saved, setSaved] = useState<Record<string, boolean>>({});
 
   const [scoring, setScoring] = useState<ScoringConfig>({
-    exactScore: 5, correctWinner: 3, bonusPhaseAdvance: 2,
+    exactScore: 5, correctWinner: 3, correctDraw: 2, bonusPhaseAdvance: 2, lockMinutes: 5,
   });
   const [scoringSaving, setScoringSaving] = useState(false);
   const [scoringSaved, setScoringSaved] = useState(false);
@@ -48,6 +51,15 @@ export default function AdminPage() {
   const [newCode, setNewCode] = useState({ label: "", maxUses: 1 });
   const [creatingCode, setCreatingCode] = useState(false);
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
+  const [savingAdmin, setSavingAdmin] = useState<Record<string, boolean>>({});
+  const [deletingCode, setDeletingCode] = useState<Record<string, boolean>>({});
+
+  const [waConnected, setWaConnected] = useState(false);
+  const [waQr, setWaQr] = useState<string | null>(null);
+  const [waPolling, setWaPolling] = useState(false);
+  const [sendingResults, setSendingResults] = useState(false);
+  const [sendResult, setSendResult] = useState<{ sent: number; failed: number } | null>(null);
+  const waIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -59,11 +71,49 @@ export default function AdminPage() {
       const initial: Record<string, string> = {};
       for (const u of usersData.users ?? []) initial[u.id] = String(u.manualPoints);
       setEditing(initial);
-      if (scoringData.config) setScoring(scoringData.config);
+      if (scoringData.config) setScoring({ exactScore: 5, correctWinner: 3, correctDraw: 2, bonusPhaseAdvance: 2, lockMinutes: 5, ...scoringData.config });
       setCodes(codesData.codes ?? []);
       setLoading(false);
     });
   }, []);
+
+  async function pollWaStatus() {
+    const res = await fetch("/api/whatsapp/status");
+    if (!res.ok) return;
+    const data = await res.json();
+    setWaConnected(data.connected);
+    setWaQr(data.qr ?? null);
+    return data.connected as boolean;
+  }
+
+  function startWaPolling() {
+    if (waIntervalRef.current) return;
+    setWaPolling(true);
+    pollWaStatus();
+    waIntervalRef.current = setInterval(async () => {
+      const connected = await pollWaStatus();
+      if (connected) stopWaPolling();
+    }, 4000);
+  }
+
+  function stopWaPolling() {
+    if (waIntervalRef.current) {
+      clearInterval(waIntervalRef.current);
+      waIntervalRef.current = null;
+    }
+    setWaPolling(false);
+  }
+
+  async function sendDailyResults() {
+    setSendingResults(true);
+    setSendResult(null);
+    const res = await fetch("/api/notifications/daily", { method: "POST", body: JSON.stringify({}) });
+    if (res.ok) {
+      const data = await res.json();
+      setSendResult({ sent: data.sent, failed: data.failed });
+    }
+    setSendingResults(false);
+  }
 
   async function saveScoring() {
     setScoringSaving(true);
@@ -97,6 +147,38 @@ export default function AdminPage() {
     setSaving((s) => ({ ...s, [userId]: false }));
   }
 
+  async function deleteCode(codeId: string) {
+    setDeletingCode((s) => ({ ...s, [codeId]: true }));
+    const res = await fetch(`/api/admin/invitation-codes/${codeId}`, { method: "DELETE" });
+    if (res.ok) {
+      setCodes((prev) => prev.filter((c) => c.id !== codeId));
+      // Recargar usuarios porque algunos fueron eliminados junto al código
+      const usersData = await fetch("/api/admin/users").then((r) => r.json());
+      setUsers(usersData.users ?? []);
+      const initial: Record<string, string> = {};
+      for (const u of usersData.users ?? []) initial[u.id] = String(u.manualPoints);
+      setEditing(initial);
+    } else {
+      const data = await res.json();
+      alert(data.error ?? "Error al eliminar");
+    }
+    setDeletingCode((s) => ({ ...s, [codeId]: false }));
+  }
+
+  async function setCodeAdmin(codeId: string, adminId: string | null) {
+    setSavingAdmin((s) => ({ ...s, [codeId]: true }));
+    const res = await fetch(`/api/admin/invitation-codes/${codeId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ adminId }),
+    });
+    if (res.ok) {
+      const { code } = await res.json();
+      setCodes((prev) => prev.map((c) => (c.id === codeId ? { ...c, admin: code.admin } : c)));
+    }
+    setSavingAdmin((s) => ({ ...s, [codeId]: false }));
+  }
+
   async function createCode() {
     setCreatingCode(true);
     const res = await fetch("/api/admin/invitation-codes", {
@@ -118,6 +200,81 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-8">
+      {/* WhatsApp */}
+      <div>
+        <h2 className="text-xl font-bold text-white">WhatsApp</h2>
+        <p className="text-slate-400 text-sm mt-1 mb-4">
+          Conecta tu WhatsApp para enviar notificaciones a los participantes.
+        </p>
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 flex flex-col gap-4">
+          {/* Estado */}
+          <div className="flex items-center gap-3">
+            <span
+              className={`w-3 h-3 rounded-full shrink-0 ${waConnected ? "bg-green-500" : "bg-slate-500"}`}
+            />
+            <span className="text-sm text-slate-300">
+              {waConnected ? "Conectado" : waPolling ? "Esperando escaneo del QR..." : "Desconectado"}
+            </span>
+            <div className="ml-auto flex gap-2">
+              {!waConnected && (
+                <button
+                  onClick={waPolling ? stopWaPolling : startWaPolling}
+                  className="px-3 py-1.5 text-sm rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
+                >
+                  {waPolling ? "Cancelar" : "Conectar"}
+                </button>
+              )}
+              {waConnected && (
+                <button
+                  onClick={startWaPolling}
+                  className="px-3 py-1.5 text-sm rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
+                >
+                  Verificar
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* QR */}
+          {waQr && !waConnected && (
+            <div className="flex flex-col items-center gap-2 pt-2">
+              <p className="text-xs text-slate-400">
+                Abrí WhatsApp → Dispositivos vinculados → Vincular un dispositivo y escanea el QR
+              </p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={waQr} alt="QR WhatsApp" className="w-52 h-52 rounded-xl border border-slate-600" />
+            </div>
+          )}
+
+          {/* Enviar resultados */}
+          {waConnected && (
+            <div className="border-t border-slate-700 pt-4 flex items-center gap-4">
+              <div>
+                <p className="text-sm font-medium text-white">Resultados del día</p>
+                <p className="text-xs text-slate-400">
+                  Envía un resumen de puntos de hoy a todos los participantes.
+                </p>
+              </div>
+              <button
+                onClick={sendDailyResults}
+                disabled={sendingResults}
+                className="ml-auto px-4 py-2 bg-green-700 hover:bg-green-600 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors shrink-0"
+              >
+                {sendingResults ? "Enviando..." : "Enviar ahora"}
+              </button>
+            </div>
+          )}
+          {sendResult && (
+            <p className="text-xs text-slate-400">
+              Enviados: <span className="text-green-400">{sendResult.sent}</span>
+              {sendResult.failed > 0 && (
+                <> · Fallidos: <span className="text-red-400">{sendResult.failed}</span></>
+              )}
+            </p>
+          )}
+        </div>
+      </div>
+
       {/* Scoring config */}
       <div>
         <h1 className="text-2xl font-bold text-white">Configuración de puntos</h1>
@@ -130,7 +287,9 @@ export default function AdminPage() {
               [
                 { key: "exactScore", label: "Marcador exacto" },
                 { key: "correctWinner", label: "Ganador correcto" },
+                { key: "correctDraw", label: "Empate correcto" },
                 { key: "bonusPhaseAdvance", label: "Bonus equipo favorito" },
+                { key: "lockMinutes", label: "Cierre antes del partido" },
               ] as { key: keyof ScoringConfig; label: string }[]
             ).map(({ key, label }) => (
               <div key={key} className="flex flex-col gap-1">
@@ -145,7 +304,7 @@ export default function AdminPage() {
                     }
                     className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500"
                   />
-                  <span className="text-slate-400 text-sm">pts</span>
+                  <span className="text-slate-400 text-sm">{key === "lockMinutes" ? "min" : "pts"}</span>
                 </div>
               </div>
             ))}
@@ -237,27 +396,82 @@ export default function AdminPage() {
                     <span className="text-sm text-slate-400">
                       {c.uses}/{c.maxUses} usos
                     </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const msg = c.users.length > 0
+                          ? `¿Eliminar este código? Se eliminarán también los ${c.users.length} usuario(s) registrados con él y todos sus pronósticos.`
+                          : "¿Eliminar este código?";
+                        if (confirm(msg)) deleteCode(c.id);
+                      }}
+                      disabled={deletingCode[c.id]}
+                      className="text-xs px-2 py-0.5 rounded bg-red-900 hover:bg-red-800 text-red-300 disabled:opacity-50 transition-colors"
+                    >
+                      {deletingCode[c.id] ? "..." : "Eliminar"}
+                    </button>
                     <span className="text-slate-500 text-xs ml-2">{isExpanded ? "▲" : "▼"}</span>
                   </div>
 
                   {isExpanded && (
-                    <div className="border-t border-slate-700 px-5 py-3">
+                    <div className="border-t border-slate-700 px-5 py-3 space-y-4">
+                      {/* Admin selector */}
+                      <div>
+                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                          Admin del grupo
+                        </p>
+                        {c.users.length === 0 ? (
+                          <p className="text-slate-500 text-sm">Sin participantes aún.</p>
+                        ) : (
+                          <div className="flex items-center gap-3">
+                            <select
+                              defaultValue={c.admin?.id ?? ""}
+                              onChange={(e) => setCodeAdmin(c.id, e.target.value || null)}
+                              disabled={savingAdmin[c.id]}
+                              className="bg-slate-700 border border-slate-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-green-500 disabled:opacity-50"
+                            >
+                              <option value="">— Sin admin —</option>
+                              {c.users.map((u) => (
+                                <option key={u.id} value={u.id}>
+                                  {u.name} ({u.email})
+                                </option>
+                              ))}
+                            </select>
+                            {savingAdmin[c.id] && (
+                              <span className="text-xs text-slate-400">Guardando...</span>
+                            )}
+                            {c.admin && (
+                              <span className="text-xs text-green-400">
+                                Admin actual: {c.admin.name}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Members list */}
                       {c.users.length === 0 ? (
                         <p className="text-slate-500 text-sm">Nadie se ha registrado con este código aún.</p>
                       ) : (
-                        <div className="space-y-2">
+                        <div>
                           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
                             Registrados con este código
                           </p>
-                          {c.users.map((u) => (
-                            <div key={u.id} className="flex items-center gap-3 text-sm">
-                              <span className="text-white font-medium">{u.name}</span>
-                              <span className="text-slate-400">{u.email}</span>
-                              <span className="text-slate-500 text-xs ml-auto">
-                                {new Date(u.createdAt).toLocaleDateString("es-CO")}
-                              </span>
-                            </div>
-                          ))}
+                          <div className="space-y-2">
+                            {c.users.map((u) => (
+                              <div key={u.id} className="flex items-center gap-3 text-sm">
+                                <span className="text-white font-medium">{u.name}</span>
+                                <span className="text-slate-400">{u.email}</span>
+                                {c.admin?.id === u.id && (
+                                  <span className="text-xs bg-purple-900 text-purple-300 px-1.5 py-0.5 rounded">
+                                    admin
+                                  </span>
+                                )}
+                                <span className="text-slate-500 text-xs ml-auto">
+                                  {new Date(u.createdAt).toLocaleDateString("es-CO")}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>

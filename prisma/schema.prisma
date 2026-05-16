@@ -22,20 +22,23 @@ model User {
   manualPoints     Int              @default(0)
   isAdmin          Boolean          @default(false)
   invitationCodeId String?
-  invitationCode   InvitationCode?  @relation(fields: [invitationCodeId], references: [id])
+  invitationCode   InvitationCode?  @relation("CodeMember", fields: [invitationCodeId], references: [id])
+  adminOfCodes     InvitationCode[] @relation("CodeAdmin")
 
   @@index([totalPoints])
 }
 
 model InvitationCode {
-  id        String   @id @default(cuid())
-  code      String   @unique
+  id        String    @id @default(cuid())
+  code      String    @unique
   label     String?
-  maxUses   Int      @default(1)
-  uses      Int      @default(0)
+  maxUses   Int       @default(1)
+  uses      Int       @default(0)
   expiresAt DateTime?
-  createdAt DateTime @default(now())
-  users     User[]
+  createdAt DateTime  @default(now())
+  users     User[]    @relation("CodeMember")
+  adminId   String?
+  admin     User?     @relation("CodeAdmin", fields: [adminId], references: [id])
 }
 
 model Team {
@@ -107,9 +110,12 @@ model ScoringConfig {
   id                String   @id @default("singleton")
   exactScore        Int      @default(5)
   correctWinner     Int      @default(3)
+  correctDraw       Int      @default(2)
   bonusPhaseAdvance Int      @default(2)
+  lockMinutes       Int      @default(5)
   updatedAt         DateTime @updatedAt
 }
+
 
 enum MatchStatus {
   SCHEDULED
