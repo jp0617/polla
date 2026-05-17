@@ -36,7 +36,15 @@ export default async function DashboardPage() {
       include: { homeTeam: true, awayTeam: true },
       orderBy: { kickoff: "asc" },
     }),
-    prisma.user.count(),
+    prisma.membership.findFirst({
+      where: { userId: session.user.id },
+      orderBy: { joinedAt: "asc" },
+      select: { invitationCodeId: true },
+    }).then((m) =>
+      m
+        ? prisma.membership.count({ where: { invitationCodeId: m.invitationCodeId } })
+        : prisma.user.count()
+    ),
     prisma.match.findMany({
       where: { status: { in: ["IN_PLAY", "PAUSED"] } },
       include: { homeTeam: true, awayTeam: true },
