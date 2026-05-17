@@ -38,7 +38,7 @@ services:
   - type: cron
     name: polla-sync
     runtime: node
-    schedule: "*/5 * * * *"
+    schedule: "0 * * * *"
     buildCommand: echo "skip"
     startCommand: >
       curl -sf
