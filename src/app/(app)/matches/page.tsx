@@ -103,6 +103,7 @@ export default function MatchesPage() {
         <div className="flex flex-wrap gap-3 text-xs text-slate-400">
           <span className="flex items-center gap-1"><span className="text-yellow-400 font-bold">+5</span> Marcador exacto</span>
           <span className="flex items-center gap-1"><span className="text-green-400 font-bold">+3</span> Ganador correcto</span>
+          <span className="flex items-center gap-1"><span className="text-blue-400 font-bold">+2</span> Empate correcto</span>
           <span className="flex items-center gap-1"><span className="text-purple-400 font-bold">+2</span> Equipo fav. avanza</span>
         </div>
       </div>
