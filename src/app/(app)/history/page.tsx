@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
+import { fmtDatetime } from "@/lib/colombia-time";
 
 interface Prediction {
   id: string;
@@ -138,7 +137,7 @@ function PredictionCard({ prediction: pred }: { prediction: Prediction }) {
     <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs text-slate-500">
-          {format(new Date(match.kickoff), "d MMM yyyy · HH:mm", { locale: es })} —{" "}
+          {fmtDatetime(match.kickoff)} —{" "}
           {formatStage(match.stage)}
         </span>
         {isFinished && (

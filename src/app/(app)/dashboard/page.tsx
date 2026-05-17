@@ -1,9 +1,8 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
 import Link from "next/link";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import { teamName } from "@/lib/team-names";
+import { todayInColombia, fmtDateMedium, fmtTime } from "@/lib/colombia-time";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +11,7 @@ export default async function DashboardPage() {
   if (!session?.user?.id) return null;
 
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+  const { start: todayStart, end: todayEnd } = todayInColombia();
 
   const [user, todayMatches, totalPlayers, liveMatches] = await Promise.all([
     prisma.user.findUnique({
@@ -133,7 +131,7 @@ export default async function DashboardPage() {
           <h2 className="text-lg font-semibold text-white">
             Partidos de hoy —{" "}
             <span className="text-slate-400 font-normal text-sm">
-              {format(now, "EEEE d 'de' MMMM", { locale: es })}
+              {fmtDateMedium(now)}
             </span>
           </h2>
           <Link href="/matches" className="text-sm text-green-400 hover:text-green-300">
@@ -194,7 +192,7 @@ interface MatchCardProps {
 }
 
 function MatchCard({ match, isLive }: MatchCardProps) {
-  const kickoffTime = format(new Date(match.kickoff), "HH:mm");
+  const kickoffTime = fmtTime(match.kickoff);
   return (
     <div className={`bg-slate-800 rounded-xl p-4 border ${isLive ? "border-red-700" : "border-slate-700"} flex items-center gap-3`}>
       <TeamDisplay team={match.homeTeam} />

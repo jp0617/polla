@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
+import { fmtTime, fmtDateKey, fmtDateLong } from "@/lib/colombia-time";
 
 interface Team {
   id: string;
@@ -71,9 +70,9 @@ export default function MatchesPage() {
 
   const stages = [...new Set(matches.map((m) => m.stage))];
 
-  // Group by date
+  // Group by Colombia date
   const byDate = matches.reduce<Record<string, Match[]>>((acc, m) => {
-    const day = m.kickoff.split("T")[0];
+    const day = fmtDateKey(m.kickoff);
     if (!acc[day]) acc[day] = [];
     acc[day].push(m);
     return acc;
@@ -116,7 +115,7 @@ export default function MatchesPage() {
         Object.entries(byDate).map(([date, dayMatches]) => (
           <section key={date}>
             <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
-              {format(new Date(date + "T12:00:00"), "EEEE, d 'de' MMMM yyyy", { locale: es })}
+              {fmtDateLong(date + "T12:00:00")}
             </h2>
             <div className="space-y-3">
               {dayMatches.map((match) => (
@@ -171,7 +170,7 @@ function MatchPredictionCard({
               </div>
             ) : (
               <div className="text-slate-400 text-sm">
-                {format(new Date(match.kickoff), "HH:mm")}
+                {fmtTime(match.kickoff)}
               </div>
             )}
           </div>
