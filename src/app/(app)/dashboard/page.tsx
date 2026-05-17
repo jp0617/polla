@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/client";
 import Link from "next/link";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { teamName } from "@/lib/team-names";
 
 export const dynamic = "force-dynamic";
 
@@ -101,7 +102,7 @@ export default async function DashboardPage() {
           )}
           <div>
             <p className="text-sm text-slate-400">Tu equipo favorito</p>
-            <p className="font-semibold text-white">{primaryMembership.favoriteTeam.name}</p>
+            <p className="font-semibold text-white">{teamName(primaryMembership.favoriteTeam.name)}</p>
           </div>
           {bonusPoints > 0 && (
             <div className="ml-auto bg-green-900 text-green-300 text-sm px-3 py-1 rounded-full">

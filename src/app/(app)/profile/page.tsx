@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
+import { teamName } from "@/lib/team-names";
 
 interface Team {
   id: string;
@@ -276,7 +277,7 @@ export default function ProfilePage() {
                   )}
                   <div>
                     <p className="text-xs text-slate-400">Equipo favorito</p>
-                    <p className="text-sm font-semibold text-white">{m.favoriteTeam.name}</p>
+                    <p className="text-sm font-semibold text-white">{teamName(m.favoriteTeam.name)}</p>
                   </div>
                 </div>
               ) : (
@@ -292,7 +293,7 @@ export default function ProfilePage() {
                   )}
                   <div>
                     <p className="text-xs text-slate-400">Pronóstico de campeón 🏆</p>
-                    <p className="text-sm font-semibold text-white">{m.championPick.name}</p>
+                    <p className="text-sm font-semibold text-white">{teamName(m.championPick.name)}</p>
                   </div>
                 </div>
               ) : (
@@ -309,10 +310,10 @@ export default function ProfilePage() {
                     <select value={membershipForm.favoriteTeamId} onChange={(e) => setMembershipForm((f) => ({ ...f, favoriteTeamId: e.target.value }))} className="input">
                       <option value="">— Sin equipo favorito —</option>
                       {allTeams.filter((t) => !t.takenBy || t.isOwnTeam).map((t) => (
-                        <option key={t.id} value={t.id}>{t.name} ({t.code}){t.isOwnTeam ? " — tu equipo actual" : ""}</option>
+                        <option key={t.id} value={t.id}>{teamName(t.name)} ({t.code}){t.isOwnTeam ? " — tu equipo actual" : ""}</option>
                       ))}
                       {allTeams.filter((t) => t.takenBy && !t.isOwnTeam).map((t) => (
-                        <option key={t.id} value="" disabled>{t.name} ({t.code}) — {t.takenBy}</option>
+                        <option key={t.id} value="" disabled>{teamName(t.name)} ({t.code}) — {t.takenBy}</option>
                       ))}
                     </select>
                   </Field>
@@ -320,7 +321,7 @@ export default function ProfilePage() {
                     <select value={membershipForm.championPickId} onChange={(e) => setMembershipForm((f) => ({ ...f, championPickId: e.target.value }))} className="input">
                       <option value="">— Sin pronóstico —</option>
                       {allTeams.map((t) => (
-                        <option key={t.id} value={t.id}>{t.name} ({t.code})</option>
+                        <option key={t.id} value={t.id}>{teamName(t.name)} ({t.code})</option>
                       ))}
                     </select>
                   </Field>
@@ -360,15 +361,15 @@ export default function ProfilePage() {
             <Field label="Equipo favorito en este grupo (opcional)">
               <select value={joinForm.favoriteTeamId} onChange={(e) => setJoinForm((f) => ({ ...f, favoriteTeamId: e.target.value }))} className="input">
                 <option value="">— Elige tu equipo —</option>
-                {joinAvailable.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.code})</option>)}
-                {joinTaken.map((t) => <option key={t.id} value="" disabled>{t.name} ({t.code}) — {t.takenBy}</option>)}
+                {joinAvailable.map((t) => <option key={t.id} value={t.id}>{teamName(t.name)} ({t.code})</option>)}
+                {joinTaken.map((t) => <option key={t.id} value="" disabled>{teamName(t.name)} ({t.code}) — {t.takenBy}</option>)}
               </select>
             </Field>
             <Field label="Pronóstico de campeón 🏆 (opcional)">
               <select value={joinForm.championPickId} onChange={(e) => setJoinForm((f) => ({ ...f, championPickId: e.target.value }))} className="input">
                 <option value="">— Elige el campeón —</option>
                 {(joinTeams.length > 0 ? joinTeams : allTeams).map((t) => (
-                  <option key={t.id} value={t.id}>{t.name} ({t.code})</option>
+                  <option key={t.id} value={t.id}>{teamName(t.name)} ({t.code})</option>
                 ))}
               </select>
             </Field>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { teamName } from "@/lib/team-names";
 
 interface Team {
   id: string;
@@ -161,7 +162,7 @@ export default function RegisterPage() {
                 <optgroup label="Disponibles">
                   {available.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.name} ({t.code})
+                      {teamName(t.name)} ({t.code})
                     </option>
                   ))}
                 </optgroup>
@@ -171,7 +172,7 @@ export default function RegisterPage() {
                 <optgroup label="Ya elegidos">
                   {taken.map((t) => (
                     <option key={t.id} value="" disabled>
-                      {t.name} ({t.code}) — {t.takenBy}
+                      {teamName(t.name)} ({t.code}) — {t.takenBy}
                     </option>
                   ))}
                 </optgroup>
@@ -196,7 +197,7 @@ export default function RegisterPage() {
               <option value="">— Elige el campeón —</option>
               {teams.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name} ({t.code})
+                  {teamName(t.name)} ({t.code})
                 </option>
               ))}
             </select>
