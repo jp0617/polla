@@ -32,6 +32,7 @@ interface Profile {
   memberships: Membership[];
   stats: { exactScores: number; correctWinners: number };
   adminOfCode: { id: string; label: string | null } | null;
+  tournamentStarted: boolean;
 }
 
 export default function ProfilePage() {
@@ -299,7 +300,9 @@ export default function ProfilePage() {
               )}
 
               {/* Edit membership */}
-              {editingMembership === m.id ? (
+              {profile.tournamentStarted ? (
+                <p className="text-xs text-slate-500 italic">🔒 El torneo ya comenzó — no se puede cambiar</p>
+              ) : editingMembership === m.id ? (
                 <form onSubmit={saveMembership} className="space-y-3 pt-2 border-t border-slate-700">
                   {saveError && <p className="text-red-400 text-sm">{saveError}</p>}
                   <Field label="Equipo favorito (exclusivo en este grupo)">

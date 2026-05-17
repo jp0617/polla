@@ -55,6 +55,10 @@ export async function GET() {
   const correctWinners = user.predictions.filter((p: { points: number | null }) => p.points === 3).length;
   const totalBonusPoints = user.memberships.reduce((sum, m) => sum + m.bonusPoints, 0);
 
+  const tournamentStarted = await prisma.match.count({
+    where: { status: { in: ["IN_PLAY", "PAUSED", "FINISHED"] } },
+  }).then((n) => n > 0);
+
   return NextResponse.json({
     id: user.id,
     name: user.name,
@@ -67,6 +71,7 @@ export async function GET() {
     memberships: user.memberships,
     stats: { exactScores, correctWinners },
     adminOfCode: codeAdmin ?? null,
+    tournamentStarted,
   });
 }
 
@@ -95,6 +100,19 @@ export async function PATCH(req: Request) {
 
   // Update membership-specific fields
   if (membershipId) {
+    // Block changes to favorite/champion once tournament has started
+    if (favoriteTeamId !== undefined || championPickId !== undefined) {
+      const started = await prisma.match.count({
+        where: { status: { in: ["IN_PLAY", "PAUSED", "FINISHED"] } },
+      }).then((n) => n > 0);
+      if (started) {
+        return NextResponse.json(
+          { error: "El torneo ya comenzó. No puedes cambiar tu equipo favorito ni pronóstico de campeón." },
+          { status: 403 }
+        );
+      }
+    }
+
     const membership = await prisma.membership.findFirst({
       where: { id: membershipId, userId: session.user.id },
     });
