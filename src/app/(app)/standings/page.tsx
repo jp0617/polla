@@ -10,6 +10,7 @@ interface LeaderboardEntry {
   bonusPoints: number;
   exactScores: number;
   correctWinners: number;
+  correctDraws: number;
   favoriteTeam: { name: string; crest: string | null; code: string } | null;
   isCurrentUser: boolean;
 }
@@ -87,19 +88,20 @@ export default function StandingsPage() {
 
           {/* Full table */}
           <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden">
-            <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-px bg-slate-700">
+            <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto] gap-px bg-slate-700">
               <Cell header>#</Cell>
               <Cell header>Jugador</Cell>
               <Cell header center>Pts</Cell>
-              <Cell header center>Exactos</Cell>
-              <Cell header center>Ganador</Cell>
-              <Cell header center>Bonus</Cell>
+              <Cell header center>⭐</Cell>
+              <Cell header center>✓</Cell>
+              <Cell header center>=</Cell>
+              <Cell header center>🎁</Cell>
             </div>
 
             {leaderboard.map((entry) => (
               <div
                 key={entry.userId}
-                className={`grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-px bg-slate-700 ${
+                className={`grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto] gap-px bg-slate-700 ${
                   entry.isCurrentUser ? "ring-2 ring-green-500 ring-inset" : ""
                 }`}
               >
@@ -121,13 +123,14 @@ export default function StandingsPage() {
                 <Cell center><span className="font-bold text-white">{entry.totalPoints}</span></Cell>
                 <Cell center><span className="text-yellow-400">{entry.exactScores}</span></Cell>
                 <Cell center><span className="text-green-400">{entry.correctWinners}</span></Cell>
+                <Cell center><span className="text-blue-400">{entry.correctDraws}</span></Cell>
                 <Cell center><span className="text-purple-400">{entry.bonusPoints}</span></Cell>
               </div>
             ))}
           </div>
 
           <div className="text-xs text-slate-500 text-center">
-            Pts = puntos totales · Exactos = marcador exacto (+5) · Ganador = resultado correcto (+3) · Bonus = equipo favorito (+2) y campeón
+            ⭐ exacto (+5) · ✓ ganador (+3) · = empate (+2) · 🎁 bonus equipo/campeón
           </div>
         </>
       )}

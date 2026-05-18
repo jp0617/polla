@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
           bonusPoints,
           exactScores: user.predictions.filter((p) => p.points === 5).length,
           correctWinners: user.predictions.filter((p) => p.points === 3).length,
+          correctDraws: user.predictions.filter((p) => p.points === 2).length,
           favoriteTeam: null,
           isCurrentUser: user.id === userId,
         };
@@ -101,6 +102,7 @@ export async function GET(req: NextRequest) {
         bonusPoints: m.bonusPoints,
         exactScores: m.user.predictions.filter((p) => p.points === 5).length,
         correctWinners: m.user.predictions.filter((p) => p.points === 3).length,
+        correctDraws: m.user.predictions.filter((p) => p.points === 2).length,
         favoriteTeam: m.favoriteTeam,
         isCurrentUser: m.user.id === userId,
       };
