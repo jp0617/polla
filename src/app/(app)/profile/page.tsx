@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { teamName } from "@/lib/team-names";
 
@@ -67,6 +67,19 @@ export default function ProfilePage() {
   const [waPolling, setWaPolling] = useState(false);
   const waIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Group admin rules
+  const [groupRules, setGroupRules] = useState<{
+    allowDraws: boolean;
+    exactScore: number | null;
+    correctWinner: number | null;
+    correctDraw: number | null;
+    bonusPhaseAdvance: number | null;
+    lockMinutes: number | null;
+  } | null>(null);
+  const [rulesLoading, setRulesLoading] = useState(false);
+  const [rulesSaving, setRulesSaving] = useState(false);
+  const [rulesMsg, setRulesMsg] = useState<string | null>(null);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -87,7 +100,44 @@ export default function ProfilePage() {
       setProfile(p);
       setTeams(t.teams ?? []);
       setInfoForm({ name: p.name, phone: p.phone });
+      if (p.adminOfCode?.id) {
+        setRulesLoading(true);
+        fetch(`/api/group-admin/${p.adminOfCode.id}`)
+          .then((r) => r.json())
+          .then((d) => setGroupRules({
+            allowDraws: d.allowDraws ?? true,
+            exactScore: d.exactScore ?? null,
+            correctWinner: d.correctWinner ?? null,
+            correctDraw: d.correctDraw ?? null,
+            bonusPhaseAdvance: d.bonusPhaseAdvance ?? null,
+            lockMinutes: d.lockMinutes ?? null,
+          }))
+          .finally(() => setRulesLoading(false));
+      }
     });
+  }
+
+  async function saveGroupRules(update: Record<string, unknown>) {
+    if (!profile?.adminOfCode?.id) return;
+    setRulesSaving(true); setRulesMsg(null);
+    const res = await fetch(`/api/group-admin/${profile.adminOfCode.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(update),
+    });
+    setRulesSaving(false);
+    if (!res.ok) { setRulesMsg("Error al guardar"); return; }
+    const d = await res.json();
+    setGroupRules({
+      allowDraws: d.allowDraws ?? true,
+      exactScore: d.exactScore ?? null,
+      correctWinner: d.correctWinner ?? null,
+      correctDraw: d.correctDraw ?? null,
+      bonusPhaseAdvance: d.bonusPhaseAdvance ?? null,
+      lockMinutes: d.lockMinutes ?? null,
+    });
+    setRulesMsg("Guardado");
+    setTimeout(() => setRulesMsg(null), 2500);
   }
 
   async function saveInfo(e: React.FormEvent) {
@@ -188,8 +238,6 @@ export default function ProfilePage() {
   }
 
   const allTeams = teams;
-  const joinAvailable = joinTeams.filter((t) => !t.takenBy);
-  const joinTaken = joinTeams.filter((t) => t.takenBy);
 
   return (
     <div className="max-w-lg mx-auto space-y-6">
@@ -301,19 +349,14 @@ export default function ProfilePage() {
               )}
 
               {/* Edit membership */}
-              {profile.tournamentStarted ? (
-                <p className="text-xs text-slate-500 italic">🔒 El torneo ya comenzó — no se puede cambiar</p>
-              ) : editingMembership === m.id ? (
+              {editingMembership === m.id ? (
                 <form onSubmit={saveMembership} className="space-y-3 pt-2 border-t border-slate-700">
                   {saveError && <p className="text-red-400 text-sm">{saveError}</p>}
-                  <Field label="Equipo favorito (exclusivo en este grupo)">
+                  <Field label="Equipo favorito">
                     <select value={membershipForm.favoriteTeamId} onChange={(e) => setMembershipForm((f) => ({ ...f, favoriteTeamId: e.target.value }))} className="input">
                       <option value="">— Sin equipo favorito —</option>
-                      {allTeams.filter((t) => !t.takenBy || t.isOwnTeam).map((t) => (
-                        <option key={t.id} value={t.id}>{teamName(t.name)} ({t.code}){t.isOwnTeam ? " — tu equipo actual" : ""}</option>
-                      ))}
-                      {allTeams.filter((t) => t.takenBy && !t.isOwnTeam).map((t) => (
-                        <option key={t.id} value="" disabled>{teamName(t.name)} ({t.code}) — {t.takenBy}</option>
+                      {allTeams.map((t) => (
+                        <option key={t.id} value={t.id}>{teamName(t.name)} ({t.code})</option>
                       ))}
                     </select>
                   </Field>
@@ -361,8 +404,9 @@ export default function ProfilePage() {
             <Field label="Equipo favorito en este grupo (opcional)">
               <select value={joinForm.favoriteTeamId} onChange={(e) => setJoinForm((f) => ({ ...f, favoriteTeamId: e.target.value }))} className="input">
                 <option value="">— Elige tu equipo —</option>
-                {joinAvailable.map((t) => <option key={t.id} value={t.id}>{teamName(t.name)} ({t.code})</option>)}
-                {joinTaken.map((t) => <option key={t.id} value="" disabled>{teamName(t.name)} ({t.code}) — {t.takenBy}</option>)}
+                {(joinTeams.length > 0 ? joinTeams : allTeams).map((t) => (
+                  <option key={t.id} value={t.id}>{teamName(t.name)} ({t.code})</option>
+                ))}
               </select>
             </Field>
             <Field label="Pronóstico de campeón 🏆 (opcional)">
@@ -437,6 +481,76 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {/* Group admin rules panel */}
+      {profile.adminOfCode && (
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 space-y-5">
+          <div>
+            <h3 className="font-semibold text-white">Reglas del grupo</h3>
+            <p className="text-sm text-slate-400 mt-0.5">
+              {profile.adminOfCode.label ?? profile.adminOfCode.id} · Los valores en blanco usan la configuración global.
+            </p>
+          </div>
+          {rulesLoading ? (
+            <p className="text-sm text-slate-400">Cargando...</p>
+          ) : groupRules ? (
+            <div className="space-y-4">
+              {/* Puntajes */}
+              <div className="grid grid-cols-2 gap-3">
+                <GroupScoreField
+                  label="Marcador exacto"
+                  placeholder="5"
+                  value={groupRules.exactScore}
+                  onSave={(v) => saveGroupRules({ exactScore: v })}
+                  disabled={rulesSaving}
+                />
+                <GroupScoreField
+                  label="Ganador correcto"
+                  placeholder="3"
+                  value={groupRules.correctWinner}
+                  onSave={(v) => saveGroupRules({ correctWinner: v })}
+                  disabled={rulesSaving}
+                />
+                <GroupScoreField
+                  label="Empate correcto"
+                  placeholder="2"
+                  value={groupRules.correctDraw}
+                  onSave={(v) => saveGroupRules({ correctDraw: v })}
+                  disabled={rulesSaving || !groupRules.allowDraws}
+                />
+                <GroupScoreField
+                  label="Bonus fase (favorito)"
+                  placeholder="2"
+                  value={groupRules.bonusPhaseAdvance}
+                  onSave={(v) => saveGroupRules({ bonusPhaseAdvance: v })}
+                  disabled={rulesSaving}
+                />
+              </div>
+
+              {/* Toggle empates */}
+              <div className="flex items-center justify-between pt-1 border-t border-slate-700">
+                <div>
+                  <p className="text-sm font-medium text-white">Empates suman puntos</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {groupRules.allowDraws ? "Activo" : "Desactivado — los empates no puntúan"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => saveGroupRules({ allowDraws: !groupRules.allowDraws })}
+                  disabled={rulesSaving}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 ${
+                    groupRules.allowDraws ? "bg-green-600" : "bg-slate-600"
+                  }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${groupRules.allowDraws ? "translate-x-6" : "translate-x-1"}`} />
+                </button>
+              </div>
+
+              {rulesMsg && <p className="text-xs text-green-400">{rulesMsg}</p>}
+            </div>
+          ) : null}
+        </div>
+      )}
+
       <style jsx>{`
         .input {
           width: 100%;
@@ -466,6 +580,46 @@ function MiniStat({ label, value }: { label: string; value: number }) {
     <div className="bg-slate-900 rounded-lg p-3 text-center">
       <div className="text-xl font-bold text-white">{value}</div>
       <div className="text-xs text-slate-400">{label}</div>
+    </div>
+  );
+}
+
+function GroupScoreField({
+  label,
+  placeholder,
+  value,
+  onSave,
+  disabled,
+}: {
+  label: string;
+  placeholder: string;
+  value: number | null;
+  onSave: (v: number | null) => void;
+  disabled?: boolean;
+}) {
+  const [local, setLocal] = React.useState(value !== null ? String(value) : "");
+
+  React.useEffect(() => {
+    setLocal(value !== null ? String(value) : "");
+  }, [value]);
+
+  return (
+    <div>
+      <label className="block text-xs font-medium text-slate-400 mb-1">{label}</label>
+      <input
+        type="number"
+        min={0}
+        max={100}
+        placeholder={placeholder}
+        value={local}
+        disabled={disabled}
+        onChange={(e) => setLocal(e.target.value)}
+        onBlur={() => {
+          const parsed = local === "" ? null : parseInt(local, 10);
+          if (!isNaN(parsed as number) || parsed === null) onSave(parsed);
+        }}
+        className="w-full bg-slate-900 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm outline-none disabled:opacity-40"
+      />
     </div>
   );
 }

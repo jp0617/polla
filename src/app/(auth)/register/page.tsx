@@ -68,8 +68,6 @@ export default function RegisterPage() {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   }
 
-  const available = teams.filter((t) => !t.takenBy);
-  const taken = teams.filter((t) => t.takenBy);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4 py-8">
@@ -157,26 +155,11 @@ export default function RegisterPage() {
               className="input"
             >
               <option value="">— Elige tu equipo —</option>
-
-              {available.length > 0 && (
-                <optgroup label="Disponibles">
-                  {available.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {teamName(t.name)} ({t.code})
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-
-              {taken.length > 0 && (
-                <optgroup label="Ya elegidos">
-                  {taken.map((t) => (
-                    <option key={t.id} value="" disabled>
-                      {teamName(t.name)} ({t.code}) — {t.takenBy}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {teamName(t.name)} ({t.code})
+                </option>
+              ))}
             </select>
             <p className="text-xs text-slate-400 mt-1">
               {form.invitationCode.length === 9

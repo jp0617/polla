@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
+import { scoreMatch } from "@/lib/scoring/engine";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -12,7 +13,7 @@ export async function GET(req: NextRequest) {
   const isAdmin = (session.user as { isAdmin?: boolean }).isAdmin;
   const groupId = req.nextUrl.searchParams.get("groupId");
 
-  // Admin without groupId sees all users (global leaderboard)
+  // Admin without groupId sees global leaderboard (uses global scoring)
   if (isAdmin && !groupId) {
     const users = await prisma.user.findMany({
       select: {
@@ -52,7 +53,6 @@ export async function GET(req: NextRequest) {
   let targetCodeId: string | null = groupId;
 
   if (!targetCodeId) {
-    // Default to user's first (earliest) membership
     const firstMembership = await prisma.membership.findFirst({
       where: { userId },
       orderBy: { joinedAt: "asc" },
@@ -65,7 +65,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ leaderboard: [] });
   }
 
-  // Verify the requesting user belongs to this group (or is admin)
   if (!isAdmin) {
     const membership = await prisma.membership.findUnique({
       where: { userId_invitationCodeId: { userId, invitationCodeId: targetCodeId } },
@@ -75,34 +74,90 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const memberships = await prisma.membership.findMany({
-    where: { invitationCodeId: targetCodeId },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          totalPoints: true,
-          manualPoints: true,
-          predictions: { where: { status: "SCORED" }, select: { points: true } },
+  const [memberships, groupCode, globalConfig] = await Promise.all([
+    prisma.membership.findMany({
+      where: { invitationCodeId: targetCodeId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            manualPoints: true,
+            predictions: {
+              where: { status: "SCORED" },
+              select: {
+                homeScore: true,
+                awayScore: true,
+                match: { select: { homeScore: true, awayScore: true } },
+              },
+            },
+          },
         },
+        favoriteTeam: { select: { name: true, crest: true, code: true } },
       },
-      favoriteTeam: { select: { name: true, crest: true, code: true } },
-    },
-  });
+    }),
+    prisma.invitationCode.findUnique({
+      where: { id: targetCodeId },
+      select: {
+        allowDraws: true,
+        exactScore: true,
+        correctWinner: true,
+        correctDraw: true,
+        bonusPhaseAdvance: true,
+        lockMinutes: true,
+      },
+    }),
+    prisma.scoringConfig.findUnique({
+      where: { id: "singleton" },
+      select: {
+        exactScore: true,
+        correctWinner: true,
+        correctDraw: true,
+        bonusPhaseAdvance: true,
+      },
+    }),
+  ]);
+
+  // Merge group overrides with global defaults
+  const pts = {
+    exactScore: groupCode?.exactScore ?? globalConfig?.exactScore ?? 5,
+    correctWinner: groupCode?.correctWinner ?? globalConfig?.correctWinner ?? 3,
+    correctDraw: groupCode?.allowDraws === false ? 0 : (groupCode?.correctDraw ?? globalConfig?.correctDraw ?? 2),
+    bonusPhaseAdvance: groupCode?.bonusPhaseAdvance ?? globalConfig?.bonusPhaseAdvance ?? 2,
+  };
 
   const leaderboard = memberships
     .map((m) => {
-      const total = m.user.totalPoints + m.user.manualPoints + m.bonusPoints;
+      let exactScores = 0;
+      let correctWinners = 0;
+      let correctDraws = 0;
+      let predictionPoints = 0;
+
+      for (const p of m.user.predictions) {
+        if (p.match.homeScore === null || p.match.awayScore === null) continue;
+        const result = scoreMatch(
+          { home: p.homeScore, away: p.awayScore },
+          { home: p.match.homeScore, away: p.match.awayScore },
+          pts
+        );
+        predictionPoints += result.points;
+        if (result.breakdown.exactScore) exactScores++;
+        else if (result.breakdown.correctWinner) correctWinners++;
+        else if (!result.breakdown.exactScore && !result.breakdown.correctWinner && result.points > 0) correctDraws++;
+      }
+
+      const total = predictionPoints + m.user.manualPoints + m.bonusPoints;
+
       return {
         rank: 0,
         userId: m.user.id,
         name: m.user.name,
         totalPoints: total,
+        predictionPoints,
         bonusPoints: m.bonusPoints,
-        exactScores: m.user.predictions.filter((p) => p.points === 5).length,
-        correctWinners: m.user.predictions.filter((p) => p.points === 3).length,
-        correctDraws: m.user.predictions.filter((p) => p.points === 2).length,
+        exactScores,
+        correctWinners,
+        correctDraws,
         favoriteTeam: m.favoriteTeam,
         isCurrentUser: m.user.id === userId,
       };
@@ -110,5 +165,15 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => b.totalPoints - a.totalPoints || a.name.localeCompare(b.name))
     .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
 
-  return NextResponse.json({ leaderboard, groupId: targetCodeId });
+  return NextResponse.json({
+    leaderboard,
+    groupId: targetCodeId,
+    groupConfig: {
+      exactScore: pts.exactScore,
+      correctWinner: pts.correctWinner,
+      correctDraw: groupCode?.allowDraws === false ? 0 : pts.correctDraw,
+      bonusPhaseAdvance: pts.bonusPhaseAdvance,
+      allowDraws: groupCode?.allowDraws ?? true,
+    },
+  });
 }

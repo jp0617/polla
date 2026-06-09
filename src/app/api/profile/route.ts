@@ -100,44 +100,12 @@ export async function PATCH(req: Request) {
 
   // Update membership-specific fields
   if (membershipId) {
-    // Block changes to favorite/champion once tournament has started
-    if (favoriteTeamId !== undefined || championPickId !== undefined) {
-      const started = await prisma.match.count({
-        where: { status: { in: ["IN_PLAY", "PAUSED", "FINISHED"] } },
-      }).then((n) => n > 0);
-      if (started) {
-        return NextResponse.json(
-          { error: "El torneo ya comenzó. No puedes cambiar tu equipo favorito ni pronóstico de campeón." },
-          { status: 403 }
-        );
-      }
-    }
-
     const membership = await prisma.membership.findFirst({
       where: { id: membershipId, userId: session.user.id },
     });
 
     if (!membership) {
       return NextResponse.json({ error: "Membresía no encontrada" }, { status: 404 });
-    }
-
-    if (favoriteTeamId !== undefined) {
-      if (favoriteTeamId) {
-        const teamTaken = await prisma.membership.findFirst({
-          where: {
-            favoriteTeamId,
-            invitationCodeId: membership.invitationCodeId,
-            NOT: { id: membershipId },
-          },
-          select: { user: { select: { name: true } } },
-        });
-        if (teamTaken) {
-          return NextResponse.json(
-            { error: `Este equipo ya fue elegido por ${teamTaken.user.name} en este grupo.` },
-            { status: 409 }
-          );
-        }
-      }
     }
 
     await prisma.membership.update({

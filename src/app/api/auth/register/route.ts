@@ -63,19 +63,6 @@ export async function POST(req: Request) {
       );
     }
 
-    if (favoriteTeamId) {
-      const teamTaken = await prisma.membership.findFirst({
-        where: { favoriteTeamId, invitationCodeId: code.id },
-        select: { user: { select: { name: true } } },
-      });
-      if (teamTaken) {
-        return NextResponse.json(
-          { error: `Este equipo ya fue elegido por ${teamTaken.user.name} en tu grupo. Cada equipo solo puede tener un fanático por grupo.` },
-          { status: 409 }
-        );
-      }
-    }
-
     const passwordHash = await bcrypt.hash(password, 12);
 
     const [user] = await prisma.$transaction([

@@ -42,16 +42,22 @@ model Membership {
 }
 
 model InvitationCode {
-  id          String       @id @default(cuid())
-  code        String       @unique
-  label       String?
-  maxUses     Int          @default(1)
-  uses        Int          @default(0)
-  expiresAt   DateTime?
-  createdAt   DateTime     @default(now())
-  memberships Membership[] @relation("CodeMembership")
-  adminId     String?
-  admin       User?        @relation("CodeAdmin", fields: [adminId], references: [id])
+  id                String       @id @default(cuid())
+  code              String       @unique
+  label             String?
+  maxUses           Int          @default(1)
+  uses              Int          @default(0)
+  expiresAt         DateTime?
+  allowDraws        Boolean      @default(true)
+  exactScore        Int?
+  correctWinner     Int?
+  correctDraw       Int?
+  bonusPhaseAdvance Int?
+  lockMinutes       Int?
+  createdAt         DateTime     @default(now())
+  memberships       Membership[] @relation("CodeMembership")
+  adminId           String?
+  admin             User?        @relation("CodeAdmin", fields: [adminId], references: [id])
 }
 
 model Team {
