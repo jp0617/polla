@@ -104,11 +104,15 @@ export function buildDailyResultMessage(data: {
   totalPoints: number;
   rank: number;
 }): string {
+  const exactMsg = data.exactScores > 0
+    ? `✅ ${data.exactScores} marcador${data.exactScores !== 1 ? "es" : ""} exacto${data.exactScores !== 1 ? "s" : ""}.\n`
+    : "";
   return (
-    `¡Hola ${data.name}! 🏆 Resultados procesados:\n` +
-    `✅ Acertaste ${data.exactScores} marcador${data.exactScores !== 1 ? "es" : ""} exacto${data.exactScores !== 1 ? "s" : ""}.\n` +
-    `⭐ Sumaste ${data.pointsToday} punto${data.pointsToday !== 1 ? "s" : ""} hoy.\n` +
-    `📊 Posición actual en la tabla: #${data.rank}.`
+    `¡Hola ${data.name}! ⚽ Resultados del día:\n` +
+    exactMsg +
+    `⭐ Puntos de hoy: *${data.pointsToday}*\n` +
+    `🏆 Total acumulado: *${data.totalPoints} pts*\n` +
+    `📊 Posición: *#${data.rank}*`
   );
 }
 

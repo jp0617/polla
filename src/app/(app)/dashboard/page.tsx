@@ -55,23 +55,30 @@ export default async function DashboardPage() {
   const bonusPoints = user?.memberships.reduce((s, m) => s + m.bonusPoints, 0) ?? 0;
   const displayPoints = (user?.totalPoints ?? 0) + (user?.manualPoints ?? 0) + bonusPoints;
 
-  // Rank within primary group, or global if no group
+  // Rank within primary group using same logic as standings table
   let userRank = 1;
   if (primaryMembership) {
-    // Count members in primary group with higher total
     const firstMembership = await prisma.membership.findFirst({
       where: { userId: session.user.id },
       orderBy: { joinedAt: "asc" },
       select: { invitationCodeId: true },
     });
     if (firstMembership) {
-      const membersAbove = await prisma.membership.count({
-        where: {
-          invitationCodeId: firstMembership.invitationCodeId,
-          user: { totalPoints: { gt: user?.totalPoints ?? 0 } },
+      const groupMembers = await prisma.membership.findMany({
+        where: { invitationCodeId: firstMembership.invitationCodeId },
+        select: {
+          bonusPoints: true,
+          user: { select: { id: true, name: true, totalPoints: true, manualPoints: true } },
         },
       });
-      userRank = membersAbove + 1;
+      const sorted = groupMembers
+        .map((m) => ({
+          userId: m.user.id,
+          name: m.user.name,
+          total: m.user.totalPoints + m.user.manualPoints + m.bonusPoints,
+        }))
+        .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+      userRank = sorted.findIndex((m) => m.userId === session.user.id) + 1 || 1;
     }
   }
 

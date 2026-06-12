@@ -3,7 +3,8 @@ import { sendDailyResultsToAll, getConnectionStatus } from "./service";
 import { startOfDay, endOfDay } from "date-fns";
 
 /**
- * Sends today's WhatsApp results via each code admin that has an active session.
+ * Sends today's accumulated results via each code admin that has an active session.
+ * Called after every match is scored — one message per match per group.
  * Returns the number of groups notified.
  */
 export async function notifyMatchResult(): Promise<number> {

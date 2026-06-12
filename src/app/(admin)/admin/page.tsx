@@ -207,7 +207,7 @@ export default function AdminPage() {
     setSaving((s) => ({ ...s, [userId]: false }));
   }
 
-  async function submitScore(matchId: string) {
+  async function submitScore(matchId: string, force = false) {
     const input = scoreInputs[matchId];
     const home = parseInt(input?.home ?? "", 10);
     const away = parseInt(input?.away ?? "", 10);
@@ -217,7 +217,7 @@ export default function AdminPage() {
     const res = await fetch(`/api/admin/matches/${matchId}/score`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ homeScore: home, awayScore: away, sendWhatsapp: false }),
+      body: JSON.stringify({ homeScore: home, awayScore: away, force }),
     });
     const data = await res.json();
     setScoringMatch((s) => ({ ...s, [matchId]: false }));
@@ -327,11 +327,6 @@ export default function AdminPage() {
                       {kickoff.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
                     </span>
                   </div>
-                  {finished ? (
-                    <p className="text-sm text-slate-400">
-                      Resultado final: <span className="text-white font-semibold">{m.homeScore} — {m.awayScore}</span>
-                    </p>
-                  ) : (
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2">
                       <input
@@ -358,15 +353,27 @@ export default function AdminPage() {
                         className="w-14 bg-slate-900 border border-slate-600 text-white text-center rounded-lg px-2 py-2 text-sm outline-none"
                       />
                     </div>
-                    <button
-                      onClick={() => submitScore(m.id)}
-                      disabled={busy}
-                      className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900 text-white py-2 rounded-lg text-sm font-medium transition-colors"
-                    >
-                      {busy ? "Guardando..." : "Guardar marcador"}
-                    </button>
+                    {finished ? (
+                      <button
+                        onClick={() => {
+                          if (confirm(`¿Corregir marcador? Se recalcularán todos los puntos.`))
+                            submitScore(m.id, true);
+                        }}
+                        disabled={busy}
+                        className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:bg-amber-900 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        {busy ? "Corrigiendo..." : "Corregir marcador"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => submitScore(m.id)}
+                        disabled={busy}
+                        className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        {busy ? "Guardando..." : "Guardar marcador"}
+                      </button>
+                    )}
                   </div>
-                  )}
                   {result && (
                     <p className={`text-xs mt-2 ${result.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>
                       {result}
