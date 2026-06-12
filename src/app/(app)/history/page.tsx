@@ -21,10 +21,24 @@ interface Prediction {
   };
 }
 
+function getPredType(pred: Prediction): "exact" | "draw" | "winner" | "miss" | "pending" {
+  if (pred.status !== "SCORED") return "pending";
+  const { match } = pred;
+  if (match.homeScore === null || match.awayScore === null) return "pending";
+  if (pred.homeScore === match.homeScore && pred.awayScore === match.awayScore) return "exact";
+  const matchIsDraw = match.homeScore === match.awayScore;
+  const predIsDraw = pred.homeScore === pred.awayScore;
+  if (matchIsDraw && predIsDraw) return "draw";
+  const matchWinner = match.homeScore > match.awayScore ? "home" : match.awayScore > match.homeScore ? "away" : "draw";
+  const predWinner = pred.homeScore > pred.awayScore ? "home" : pred.awayScore > pred.homeScore ? "away" : "draw";
+  if (matchWinner === predWinner && (pred.points ?? 0) > 0) return "winner";
+  return "miss";
+}
+
 export default function HistoryPage() {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "exact" | "winner" | "miss">("all");
+  const [filter, setFilter] = useState<"all" | "exact" | "draw" | "winner" | "miss">("all");
 
   useEffect(() => {
     fetch("/api/predictions")
@@ -37,15 +51,14 @@ export default function HistoryPage() {
 
   const scored = predictions.filter((p) => p.status === "SCORED");
   const totalPoints = scored.reduce((s, p) => s + (p.points ?? 0), 0);
-  const exactCount = scored.filter((p) => p.points === 5).length;
-  const winnerCount = scored.filter((p) => p.points === 3).length;
-  const missCount = scored.filter((p) => p.points === 0).length;
+  const exactCount = predictions.filter((p) => getPredType(p) === "exact").length;
+  const drawCount = predictions.filter((p) => getPredType(p) === "draw").length;
+  const winnerCount = predictions.filter((p) => getPredType(p) === "winner").length;
+  const missCount = predictions.filter((p) => getPredType(p) === "miss").length;
 
   const filtered = predictions.filter((p) => {
-    if (filter === "exact") return p.points === 5;
-    if (filter === "winner") return p.points === 3;
-    if (filter === "miss") return p.points === 0 && p.status === "SCORED";
-    return true;
+    if (filter === "all") return true;
+    return getPredType(p) === filter;
   });
 
   return (
@@ -53,16 +66,17 @@ export default function HistoryPage() {
       <h1 className="text-2xl font-bold text-white">Mis Pronósticos</h1>
 
       {/* Summary stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatBox label="Puntos totales" value={totalPoints} color="text-white" bg="bg-green-900" />
         <StatBox label="Exactos" value={exactCount} color="text-yellow-400" bg="bg-yellow-900/40" />
+        <StatBox label="Empate" value={drawCount} color="text-blue-400" bg="bg-blue-900/40" />
         <StatBox label="Ganador" value={winnerCount} color="text-green-400" bg="bg-green-900/40" />
         <StatBox label="Fallados" value={missCount} color="text-red-400" bg="bg-red-900/40" />
       </div>
 
       {/* Filter */}
       <div className="flex gap-2 flex-wrap">
-        {(["all", "exact", "winner", "miss"] as const).map((f) => (
+        {(["all", "exact", "draw", "winner", "miss"] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -72,7 +86,7 @@ export default function HistoryPage() {
                 : "bg-slate-800 text-slate-300 hover:bg-slate-700"
             }`}
           >
-            {f === "all" ? "Todos" : f === "exact" ? "Exactos" : f === "winner" ? "Ganador" : "Fallados"}
+            {f === "all" ? "Todos" : f === "exact" ? "Exactos" : f === "draw" ? "Empate" : f === "winner" ? "Ganador" : "Fallados"}
           </button>
         ))}
       </div>
@@ -114,22 +128,27 @@ function StatBox({
 function PredictionCard({ prediction: pred }: { prediction: Prediction }) {
   const { match } = pred;
   const isFinished = match.status === "FINISHED";
+  const predType = getPredType(pred);
 
   const pointsColor =
-    pred.points === 5
+    predType === "exact"
       ? "bg-yellow-900 text-yellow-300"
-      : pred.points === 3
+      : predType === "draw"
+      ? "bg-blue-900 text-blue-300"
+      : predType === "winner"
       ? "bg-green-900 text-green-300"
-      : pred.points === 0
+      : predType === "miss"
       ? "bg-slate-700 text-slate-400"
       : "bg-slate-700 text-slate-500";
 
   const pointsLabel =
-    pred.points === 5
+    predType === "exact"
       ? "Exacto ⭐"
-      : pred.points === 3
+      : predType === "draw"
+      ? "Empate ✓"
+      : predType === "winner"
       ? "Ganador ✓"
-      : pred.points === 0
+      : predType === "miss"
       ? "Fallado ✗"
       : "Pendiente";
 
