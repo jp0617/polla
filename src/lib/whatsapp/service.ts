@@ -108,9 +108,9 @@ export function buildDailyResultMessage(data: {
     ? `✅ ${data.exactScores} marcador${data.exactScores !== 1 ? "es" : ""} exacto${data.exactScores !== 1 ? "s" : ""}.\n`
     : "";
   return (
-    `¡Hola ${data.name}! ⚽ Resultados del día:\n` +
+    `¡Hola ${data.name}! ⚽ Resultados hasta la fecha:\n` +
     exactMsg +
-    `⭐ Puntos de hoy: *${data.pointsToday}*\n` +
+    `⭐ Puntos hasta la fecha: *${data.pointsToday}*\n` +
     `🏆 Total acumulado: *${data.totalPoints} pts*\n` +
     `📊 Posición: *#${data.rank}*`
   );
