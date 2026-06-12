@@ -63,6 +63,22 @@ export default function AdminPage() {
 
   const [teams, setTeams] = useState<{ id: string; name: string; crest: string | null }[]>([]);
 
+  // Manual score entry
+  interface AdminMatch {
+    id: string;
+    kickoff: string;
+    status: string;
+    manualScore: boolean;
+    homeScore: number | null;
+    awayScore: number | null;
+    homeTeam: { name: string; code: string; crest: string | null };
+    awayTeam: { name: string; code: string; crest: string | null };
+  }
+  const [matches, setMatches] = useState<AdminMatch[]>([]);
+  const [scoreInputs, setScoreInputs] = useState<Record<string, { home: string; away: string }>>({});
+  const [scoringMatch, setScoringMatch] = useState<Record<string, boolean>>({});
+  const [scoreResult, setScoreResult] = useState<Record<string, string>>({});
+
   const [waConnected, setWaConnected] = useState(false);
   const [waQr, setWaQr] = useState<string | null>(null);
   const [waPolling, setWaPolling] = useState(false);
@@ -76,7 +92,8 @@ export default function AdminPage() {
       fetch("/api/admin/scoring").then((r) => r.json()),
       fetch("/api/admin/invitation-codes").then((r) => r.json()),
       fetch("/api/teams").then((r) => r.json()),
-    ]).then(([usersData, scoringData, codesData, teamsData]) => {
+      fetch("/api/admin/matches").then((r) => r.json()),
+    ]).then(([usersData, scoringData, codesData, teamsData, matchesData]) => {
       setUsers(usersData.users ?? []);
       const initial: Record<string, string> = {};
       for (const u of usersData.users ?? []) initial[u.id] = String(u.manualPoints);
@@ -87,6 +104,16 @@ export default function AdminPage() {
       }
       setCodes(codesData.codes ?? []);
       setTeams(teamsData.teams ?? []);
+      const ms: AdminMatch[] = matchesData.matches ?? [];
+      setMatches(ms);
+      const inputs: Record<string, { home: string; away: string }> = {};
+      for (const m of ms) {
+        inputs[m.id] = {
+          home: m.homeScore !== null ? String(m.homeScore) : "",
+          away: m.awayScore !== null ? String(m.awayScore) : "",
+        };
+      }
+      setScoreInputs(inputs);
       setLoading(false);
     });
   }, []);
@@ -180,6 +207,38 @@ export default function AdminPage() {
     setSaving((s) => ({ ...s, [userId]: false }));
   }
 
+  async function submitScore(matchId: string) {
+    const input = scoreInputs[matchId];
+    const home = parseInt(input?.home ?? "", 10);
+    const away = parseInt(input?.away ?? "", 10);
+    if (isNaN(home) || isNaN(away)) return;
+    setScoringMatch((s) => ({ ...s, [matchId]: true }));
+    setScoreResult((s) => ({ ...s, [matchId]: "" }));
+    const res = await fetch(`/api/admin/matches/${matchId}/score`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ homeScore: home, awayScore: away, sendWhatsapp: false }),
+    });
+    const data = await res.json();
+    setScoringMatch((s) => ({ ...s, [matchId]: false }));
+    if (res.ok) {
+      setMatches((prev) =>
+        prev.map((m) =>
+          m.id === matchId
+            ? { ...m, homeScore: home, awayScore: away, status: "FINISHED", manualScore: true }
+            : m
+        )
+      );
+      const wa = data.whatsapp;
+      const waMsg = wa?.codesNotified > 0
+        ? ` · WhatsApp enviado a ${wa.codesNotified} grupo(s)`
+        : " · Sin admins de grupo conectados a WhatsApp";
+      setScoreResult((s) => ({ ...s, [matchId]: `✓ ${data.scored} pronósticos puntuados${waMsg}` }));
+    } else {
+      setScoreResult((s) => ({ ...s, [matchId]: `Error: ${data.error}` }));
+    }
+  }
+
   async function deleteCode(codeId: string) {
     setDeletingCode((s) => ({ ...s, [codeId]: true }));
     const res = await fetch(`/api/admin/invitation-codes/${codeId}`, { method: "DELETE" });
@@ -233,6 +292,93 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-8">
+      {/* Marcadores manuales */}
+      <div>
+        <h2 className="text-xl font-bold text-white">Marcadores</h2>
+        <p className="text-slate-400 text-sm mt-1 mb-4">
+          Ingresa el resultado de un partido manualmente. El cron no volverá a procesarlo.
+        </p>
+        {matches.length === 0 ? (
+          <p className="text-slate-500 text-sm">No hay partidos en los próximos/últimos 3 días.</p>
+        ) : (
+          <div className="space-y-3">
+            {matches.map((m) => {
+              const kickoff = new Date(m.kickoff);
+              const input = scoreInputs[m.id] ?? { home: "", away: "" };
+              const busy = scoringMatch[m.id] ?? false;
+              const result = scoreResult[m.id];
+              const finished = m.status === "FINISHED";
+              return (
+                <div key={m.id} className={`bg-slate-800 rounded-xl border p-4 ${finished ? "border-slate-700 opacity-70" : "border-slate-700"}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-white font-semibold text-sm">
+                        {m.homeTeam.code} vs {m.awayTeam.code}
+                      </span>
+                      {m.manualScore && (
+                        <span className="text-xs bg-amber-600 text-white px-2 py-0.5 rounded-full">Manual</span>
+                      )}
+                      {finished && (
+                        <span className="text-xs bg-slate-600 text-slate-300 px-2 py-0.5 rounded-full">Terminado</span>
+                      )}
+                    </div>
+                    <span className="text-xs text-slate-400">
+                      {kickoff.toLocaleDateString("es", { day: "2-digit", month: "short" })}{" "}
+                      {kickoff.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                  {finished ? (
+                    <p className="text-sm text-slate-400">
+                      Resultado final: <span className="text-white font-semibold">{m.homeScore} — {m.awayScore}</span>
+                    </p>
+                  ) : (
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        max={30}
+                        placeholder="0"
+                        value={input.home}
+                        onChange={(e) =>
+                          setScoreInputs((s) => ({ ...s, [m.id]: { ...s[m.id], home: e.target.value } }))
+                        }
+                        className="w-14 bg-slate-900 border border-slate-600 text-white text-center rounded-lg px-2 py-2 text-sm outline-none"
+                      />
+                      <span className="text-slate-400 font-bold">—</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={30}
+                        placeholder="0"
+                        value={input.away}
+                        onChange={(e) =>
+                          setScoreInputs((s) => ({ ...s, [m.id]: { ...s[m.id], away: e.target.value } }))
+                        }
+                        className="w-14 bg-slate-900 border border-slate-600 text-white text-center rounded-lg px-2 py-2 text-sm outline-none"
+                      />
+                    </div>
+                    <button
+                      onClick={() => submitScore(m.id)}
+                      disabled={busy}
+                      className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      {busy ? "Guardando..." : "Guardar marcador"}
+                    </button>
+                  </div>
+                  )}
+                  {result && (
+                    <p className={`text-xs mt-2 ${result.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>
+                      {result}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* WhatsApp */}
       <div>
         <h2 className="text-xl font-bold text-white">WhatsApp</h2>

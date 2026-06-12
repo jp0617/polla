@@ -56,7 +56,7 @@ export async function GET() {
   const totalBonusPoints = user.memberships.reduce((sum, m) => sum + m.bonusPoints, 0);
 
   const tournamentStarted = await prisma.match.count({
-    where: { status: { in: ["IN_PLAY", "PAUSED", "FINISHED"] } },
+    where: { status: "FINISHED" },
   }).then((n) => n > 0);
 
   return NextResponse.json({
@@ -100,6 +100,18 @@ export async function PATCH(req: Request) {
 
   // Update membership-specific fields
   if (membershipId) {
+    if (favoriteTeamId !== undefined || championPickId !== undefined) {
+      const firstMatchPlayed = await prisma.match.count({
+        where: { status: "FINISHED" },
+      }).then((n) => n > 0);
+      if (firstMatchPlayed) {
+        return NextResponse.json(
+          { error: "Ya se jugó el primer partido. No puedes cambiar tu equipo favorito ni pronóstico de campeón." },
+          { status: 403 }
+        );
+      }
+    }
+
     const membership = await prisma.membership.findFirst({
       where: { id: membershipId, userId: session.user.id },
     });

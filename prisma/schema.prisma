@@ -90,6 +90,7 @@ model Match {
   status      MatchStatus  @default(SCHEDULED)
   homeScore   Int?
   awayScore   Int?
+  manualScore Boolean      @default(false)
   predictions Prediction[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt

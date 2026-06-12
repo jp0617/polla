@@ -5,8 +5,8 @@ import {
   mapApiStage,
   stageOrder,
 } from "./client";
-import { scoreMatch } from "@/lib/scoring/engine";
 import { getScoringConfig } from "@/lib/scoring/config";
+import { scoreMatchPredictions } from "@/lib/scoring/scoreMatchPredictions";
 
 export async function syncMatches(): Promise<{
   updated: number;
@@ -64,7 +64,12 @@ export async function syncMatches(): Promise<{
       }),
     ]);
 
-    // Upsert match
+    // Upsert match — never overwrite a manually set score
+    const existingMatch = await prisma.match.findUnique({
+      where: { apiMatchId: apiMatch.id },
+      select: { id: true, manualScore: true },
+    });
+
     const match = await prisma.match.upsert({
       where: { apiMatchId: apiMatch.id },
       create: {
@@ -78,15 +83,20 @@ export async function syncMatches(): Promise<{
         homeScore: apiMatch.score.fullTime.home ?? undefined,
         awayScore: apiMatch.score.fullTime.away ?? undefined,
       },
-      update: {
-        status,
-        homeScore: apiMatch.score.fullTime.home ?? undefined,
-        awayScore: apiMatch.score.fullTime.away ?? undefined,
-        stage,
-      },
+      update: existingMatch?.manualScore
+        ? { stage } // only update stage if score was set manually
+        : {
+            status,
+            homeScore: apiMatch.score.fullTime.home ?? undefined,
+            awayScore: apiMatch.score.fullTime.away ?? undefined,
+            stage,
+          },
     });
 
     updatedCount++;
+
+    // Skip prediction scoring if score was entered manually (already handled there)
+    if (existingMatch?.manualScore) continue;
 
     // Score predictions only when match is FINISHED
     if (
@@ -94,36 +104,12 @@ export async function syncMatches(): Promise<{
       apiMatch.score.fullTime.home !== null &&
       apiMatch.score.fullTime.away !== null
     ) {
-      const actual = {
-        home: apiMatch.score.fullTime.home,
-        away: apiMatch.score.fullTime.away,
-      };
-
-      const unscoredPredictions = await prisma.prediction.findMany({
-        where: { matchId: match.id, status: { not: "SCORED" } },
-        select: { id: true, userId: true, homeScore: true, awayScore: true },
-      });
-
-      for (const pred of unscoredPredictions) {
-        const result = scoreMatch(
-          { home: pred.homeScore, away: pred.awayScore },
-          actual,
-          scoringConfig
-        );
-
-        await prisma.prediction.update({
-          where: { id: pred.id },
-          data: { points: result.points, status: "SCORED" },
-        });
-
-        // Update user total prediction points (bonus is tracked separately in Membership)
-        await prisma.user.update({
-          where: { id: pred.userId },
-          data: { totalPoints: { increment: result.points } },
-        });
-
-        scoredCount++;
-      }
+      const scored = await scoreMatchPredictions(
+        match.id,
+        apiMatch.score.fullTime.home,
+        apiMatch.score.fullTime.away
+      );
+      scoredCount += scored;
     }
 
     // Detect phase advances and award bonus points

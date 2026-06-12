@@ -349,7 +349,9 @@ export default function ProfilePage() {
               )}
 
               {/* Edit membership */}
-              {editingMembership === m.id ? (
+              {profile.tournamentStarted ? (
+                <p className="text-xs text-slate-500 italic">🔒 Ya se jugó el primer partido — no se puede cambiar</p>
+              ) : editingMembership === m.id ? (
                 <form onSubmit={saveMembership} className="space-y-3 pt-2 border-t border-slate-700">
                   {saveError && <p className="text-red-400 text-sm">{saveError}</p>}
                   <Field label="Equipo favorito">
