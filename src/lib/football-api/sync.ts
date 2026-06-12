@@ -7,6 +7,7 @@ import {
 } from "./client";
 import { getScoringConfig } from "@/lib/scoring/config";
 import { scoreMatchPredictions } from "@/lib/scoring/scoreMatchPredictions";
+import { notifyMatchResult } from "@/lib/whatsapp/notifyMatchResult";
 
 export async function syncMatches(): Promise<{
   updated: number;
@@ -110,6 +111,9 @@ export async function syncMatches(): Promise<{
         apiMatch.score.fullTime.away
       );
       scoredCount += scored;
+      if (scored > 0) {
+        await notifyMatchResult();
+      }
     }
 
     // Detect phase advances and award bonus points
