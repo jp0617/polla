@@ -38,12 +38,10 @@ services:
   - type: cron
     name: polla-sync
     runtime: node
-    schedule: "0 * * * *"
+    schedule: "0/35 * * * *"
     buildCommand: echo "skip"
-    startCommand: >
-      curl -sf
-      -H "Authorization: Bearer $CRON_SECRET"
-      $APP_URL/api/cron/sync
+    startCommand: > 
+      curl -sf -H "Authorization: Bearer $CRON_SECRET" $APP_URL/api/cron/sync
     envVars:
       - key: CRON_SECRET
         fromService:

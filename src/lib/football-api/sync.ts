@@ -111,9 +111,6 @@ export async function syncMatches(): Promise<{
         apiMatch.score.fullTime.away
       );
       scoredCount += scored;
-      if (scored > 0) {
-        await notifyMatchResult();
-      }
     }
 
     // Detect phase advances and award bonus points
@@ -141,6 +138,10 @@ export async function syncMatches(): Promise<{
       where: { matchId: match.id, status: "PENDING" },
       data: { status: "LOCKED" },
     });
+  }
+
+  if (scoredCount > 0) {
+    await notifyMatchResult();
   }
 
   return { updated: updatedCount, scored: scoredCount, bonuses: bonusCount };
