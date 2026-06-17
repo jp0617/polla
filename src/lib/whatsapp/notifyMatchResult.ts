@@ -50,9 +50,10 @@ export async function notifyMatchResult(): Promise<number> {
     const ranked = code.memberships
       .map((m) => ({
         userId: m.user.id,
+        name: m.user.name,
         total: m.user.totalPoints + m.user.manualPoints + m.bonusPoints,
       }))
-      .sort((a, b) => b.total - a.total);
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
     const rankMap = new Map(ranked.map((r, idx) => [r.userId, idx + 1]));
 
     const results = code.memberships.map((m) => {
