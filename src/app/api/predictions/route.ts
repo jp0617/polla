@@ -50,6 +50,7 @@ export async function POST(req: Request) {
     );
   }
 
+  const now = new Date();
   const prediction = await prisma.prediction.upsert({
     where: { userId_matchId: { userId: session.user.id, matchId } },
     create: {
@@ -57,8 +58,9 @@ export async function POST(req: Request) {
       matchId,
       homeScore,
       awayScore,
+      userUpdatedAt: now,
     },
-    update: { homeScore, awayScore },
+    update: { homeScore, awayScore, userUpdatedAt: now },
   });
 
   return NextResponse.json({ prediction });

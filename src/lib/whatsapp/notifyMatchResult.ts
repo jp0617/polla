@@ -70,6 +70,26 @@ export async function notifyMatchResult(): Promise<number> {
 
     await sendDailyResultsToAll(code.adminId, results);
     codesNotified++;
+
+    // Mark wppSentAt on predictions communicated for the first time
+    const now = new Date();
+    for (const m of code.memberships) {
+      const predIds = await prisma.prediction.findMany({
+        where: {
+          userId: m.user.id,
+          status: "SCORED",
+          wppSentAt: null,
+          match: { kickoff: { gte: startOfDay(now), lte: endOfDay(now) } },
+        },
+        select: { id: true },
+      });
+      if (predIds.length > 0) {
+        await prisma.prediction.updateMany({
+          where: { id: { in: predIds.map((p) => p.id) } },
+          data: { wppSentAt: now },
+        });
+      }
+    }
   }
 
   return codesNotified;

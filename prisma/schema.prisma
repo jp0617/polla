@@ -90,10 +90,11 @@ model Match {
   status      MatchStatus  @default(SCHEDULED)
   homeScore   Int?
   awayScore   Int?
-  manualScore Boolean      @default(false)
-  predictions Prediction[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  manualScore     Boolean      @default(false)
+  scoreUpdatedAt  DateTime?
+  predictions     Prediction[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   @@index([kickoff])
   @@index([status])
@@ -107,10 +108,12 @@ model Prediction {
   match     Match            @relation(fields: [matchId], references: [id], onDelete: Cascade)
   homeScore Int
   awayScore Int
-  points    Int?
-  status    PredictionStatus @default(PENDING)
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  points        Int?
+  status        PredictionStatus @default(PENDING)
+  wppSentAt     DateTime?
+  userUpdatedAt DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
   @@unique([userId, matchId])
   @@index([userId])

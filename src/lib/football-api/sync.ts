@@ -91,6 +91,7 @@ export async function syncMatches(): Promise<{
             homeScore: apiMatch.score.fullTime.home ?? undefined,
             awayScore: apiMatch.score.fullTime.away ?? undefined,
             stage,
+            ...(apiMatch.score.fullTime.home !== null ? { scoreUpdatedAt: new Date() } : {}),
           },
     });
 

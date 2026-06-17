@@ -29,6 +29,7 @@ export async function GET(req: Request) {
           awayScore: true,
           points: true,
           status: true,
+          userUpdatedAt: true,
         },
       },
     },

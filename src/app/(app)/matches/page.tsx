@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { fmtTime, fmtDateKey, fmtDateLong } from "@/lib/colombia-time";
+import { fmtTime, fmtDateKey, fmtDateLong, fmtDatetime } from "@/lib/colombia-time";
 
 interface Team {
   id: string;
@@ -17,6 +17,7 @@ interface Prediction {
   awayScore: number;
   points: number | null;
   status: string;
+  userUpdatedAt: string | null;
 }
 
 interface Match {
@@ -27,6 +28,7 @@ interface Match {
   status: string;
   homeScore: number | null;
   awayScore: number | null;
+  scoreUpdatedAt: string | null;
   isLocked: boolean;
   homeTeam: Team;
   awayTeam: Team;
@@ -37,7 +39,9 @@ export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [stageFilter, setStageFilter] = useState("");
+  const [tabFilter, setTabFilter] = useState<"today" | "finished" | "upcoming">("today");
   const [saving, setSaving] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
   const loadMatches = useCallback(async () => {
     const params = new URLSearchParams();
@@ -46,12 +50,21 @@ export default function MatchesPage() {
     const res = await fetch(`/api/matches?${params}`);
     const data = await res.json();
     setMatches(data);
+    setLastRefresh(new Date());
     setLoading(false);
   }, [stageFilter]);
 
   useEffect(() => {
     loadMatches();
   }, [loadMatches]);
+
+  // Auto-refresh every 60s when there are live matches
+  useEffect(() => {
+    const hasLive = matches.some((m) => m.status === "IN_PLAY" || m.status === "PAUSED");
+    if (!hasLive) return;
+    const interval = setInterval(loadMatches, 60_000);
+    return () => clearInterval(interval);
+  }, [matches, loadMatches]);
 
   async function savePrediction(
     matchId: string,
@@ -68,10 +81,21 @@ export default function MatchesPage() {
     loadMatches();
   }
 
-  const stages = [...new Set(matches.map((m) => m.stage))];
+  const todayKey = fmtDateKey(new Date().toISOString());
+
+  const tabFiltered = matches.filter((m) => {
+    const day = fmtDateKey(m.kickoff);
+    if (tabFilter === "finished") return m.status === "FINISHED";
+    if (tabFilter === "today") return day === todayKey;
+    // upcoming: not finished and not today
+    return m.status !== "FINISHED" && day !== todayKey;
+  });
+
+  const stages = [...new Set(tabFiltered.map((m) => m.stage))];
 
   // Group by Colombia date
-  const byDate = matches.reduce<Record<string, Match[]>>((acc, m) => {
+  const byDate = tabFiltered.reduce<Record<string, Match[]>>((acc, m) => {
+    if (stageFilter && m.stage !== stageFilter) return acc;
     const day = fmtDateKey(m.kickoff);
     if (!acc[day]) acc[day] = [];
     acc[day].push(m);
@@ -82,10 +106,35 @@ export default function MatchesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white">Partidos</h1>
+        {matches.some((m) => m.status === "IN_PLAY" || m.status === "PAUSED") && (
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            En vivo · actualiza cada 60s
+            {lastRefresh && <span>· {fmtTime(lastRefresh.toISOString())}</span>}
+          </div>
+        )}
+      </div>
+
+      {/* Tab filters */}
+      <div className="flex gap-2">
+        {(["today", "upcoming", "finished"] as const).map((f) => {
+          const label = f === "today" ? "Hoy" : f === "upcoming" ? "Próximos" : "Finalizados";
+          return (
+            <button
+              key={f}
+              onClick={() => { setTabFilter(f); setStageFilter(""); }}
+              className={`text-sm px-4 py-1.5 rounded-full transition-colors ${
+                tabFilter === f ? "bg-green-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
         <select
           value={stageFilter}
           onChange={(e) => setStageFilter(e.target.value)}
-          className="bg-slate-800 border border-slate-600 text-slate-200 rounded-lg px-3 py-2 text-sm"
+          className="ml-auto bg-slate-800 border border-slate-600 text-slate-200 rounded-lg px-3 py-1.5 text-sm"
         >
           <option value="">Todas las fases</option>
           {stages.map((s) => (
@@ -171,6 +220,11 @@ function MatchPredictionCard({
             ) : (
               <div className="text-slate-400 text-sm">
                 {fmtTime(match.kickoff)}
+              </div>
+            )}
+            {match.userPrediction?.userUpdatedAt && (
+              <div className="text-xs text-slate-500 mt-0.5">
+                Actualizado {fmtDatetime(match.userPrediction.userUpdatedAt)}
               </div>
             )}
           </div>

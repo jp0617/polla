@@ -9,12 +9,7 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Return matches from the last 3 days and the next 3 days
-  const from = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-  const to = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
-
   const matches = await prisma.match.findMany({
-    where: { kickoff: { gte: from, lte: to } },
     include: {
       homeTeam: { select: { name: true, code: true, crest: true } },
       awayTeam: { select: { name: true, code: true, crest: true } },

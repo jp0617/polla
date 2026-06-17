@@ -68,7 +68,7 @@ export async function POST(
   // Save score and mark as manual
   const match = await prisma.match.update({
     where: { id: matchId },
-    data: { homeScore, awayScore, status: "FINISHED", manualScore: true },
+    data: { homeScore, awayScore, status: "FINISHED", manualScore: true, scoreUpdatedAt: new Date() },
     include: {
       homeTeam: { select: { name: true, code: true } },
       awayTeam: { select: { name: true, code: true } },

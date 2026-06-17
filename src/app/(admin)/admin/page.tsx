@@ -71,10 +71,12 @@ export default function AdminPage() {
     manualScore: boolean;
     homeScore: number | null;
     awayScore: number | null;
+    scoreUpdatedAt: string | null;
     homeTeam: { name: string; code: string; crest: string | null };
     awayTeam: { name: string; code: string; crest: string | null };
   }
   const [matches, setMatches] = useState<AdminMatch[]>([]);
+  const [matchFilter, setMatchFilter] = useState<"today" | "finished" | "upcoming">("today");
   const [scoreInputs, setScoreInputs] = useState<Record<string, { home: string; away: string }>>({});
   const [scoringMatch, setScoringMatch] = useState<Record<string, boolean>>({});
   const [scoreResult, setScoreResult] = useState<Record<string, string>>({});
@@ -225,7 +227,7 @@ export default function AdminPage() {
       setMatches((prev) =>
         prev.map((m) =>
           m.id === matchId
-            ? { ...m, homeScore: home, awayScore: away, status: "FINISHED", manualScore: true }
+            ? { ...m, homeScore: home, awayScore: away, status: "FINISHED", manualScore: true, scoreUpdatedAt: new Date().toISOString() }
             : m
         )
       );
@@ -298,92 +300,148 @@ export default function AdminPage() {
         <p className="text-slate-400 text-sm mt-1 mb-4">
           Ingresa el resultado de un partido manualmente. El cron no volverá a procesarlo.
         </p>
-        {matches.length === 0 ? (
-          <p className="text-slate-500 text-sm">No hay partidos en los próximos/últimos 3 días.</p>
-        ) : (
-          <div className="space-y-3">
-            {matches.map((m) => {
-              const kickoff = new Date(m.kickoff);
-              const input = scoreInputs[m.id] ?? { home: "", away: "" };
-              const busy = scoringMatch[m.id] ?? false;
-              const result = scoreResult[m.id];
-              const finished = m.status === "FINISHED";
-              return (
-                <div key={m.id} className={`bg-slate-800 rounded-xl border p-4 ${finished ? "border-slate-700 opacity-70" : "border-slate-700"}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-white font-semibold text-sm">
-                        {m.homeTeam.code} vs {m.awayTeam.code}
+
+        {/* Filtros */}
+        {(() => {
+          const now = new Date();
+          const todayStr = now.toDateString();
+          const finishedMatches = matches.filter((m) => m.status === "FINISHED");
+          const todayMatches = matches.filter((m) => new Date(m.kickoff).toDateString() === todayStr);
+          const upcomingMatches = matches.filter((m) => m.status !== "FINISHED" && new Date(m.kickoff).toDateString() !== todayStr);
+          const visibleMatches =
+            matchFilter === "finished" ? finishedMatches
+            : matchFilter === "today" ? todayMatches
+            : upcomingMatches;
+
+          return (
+            <>
+              <div className="flex gap-2 mb-4 flex-wrap items-center">
+                {(["today", "finished", "upcoming"] as const).map((f) => {
+                  const count = f === "finished" ? finishedMatches.length : f === "today" ? todayMatches.length : upcomingMatches.length;
+                  const label = f === "today" ? "Hoy" : f === "finished" ? "Finalizados" : "Próximos";
+                  return (
+                    <button
+                      key={f}
+                      onClick={() => setMatchFilter(f)}
+                      className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full transition-colors ${
+                        matchFilter === f ? "bg-green-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                      }`}
+                    >
+                      {label}
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-mono ${matchFilter === f ? "bg-green-700" : "bg-slate-700"}`}>
+                        {count}
                       </span>
-                      {m.manualScore && (
-                        <span className="text-xs bg-amber-600 text-white px-2 py-0.5 rounded-full">Manual</span>
-                      )}
-                      {finished && (
-                        <span className="text-xs bg-slate-600 text-slate-300 px-2 py-0.5 rounded-full">Terminado</span>
-                      )}
-                    </div>
-                    <span className="text-xs text-slate-400">
-                      {kickoff.toLocaleDateString("es", { day: "2-digit", month: "short" })}{" "}
-                      {kickoff.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={0}
-                        max={30}
-                        placeholder="0"
-                        value={input.home}
-                        onChange={(e) =>
-                          setScoreInputs((s) => ({ ...s, [m.id]: { ...s[m.id], home: e.target.value } }))
-                        }
-                        className="w-14 bg-slate-900 border border-slate-600 text-white text-center rounded-lg px-2 py-2 text-sm outline-none"
-                      />
-                      <span className="text-slate-400 font-bold">—</span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={30}
-                        placeholder="0"
-                        value={input.away}
-                        onChange={(e) =>
-                          setScoreInputs((s) => ({ ...s, [m.id]: { ...s[m.id], away: e.target.value } }))
-                        }
-                        className="w-14 bg-slate-900 border border-slate-600 text-white text-center rounded-lg px-2 py-2 text-sm outline-none"
-                      />
-                    </div>
-                    {finished ? (
-                      <button
-                        onClick={() => {
-                          if (confirm(`¿Corregir marcador? Se recalcularán todos los puntos.`))
-                            submitScore(m.id, true);
-                        }}
-                        disabled={busy}
-                        className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:bg-amber-900 text-white py-2 rounded-lg text-sm font-medium transition-colors"
-                      >
-                        {busy ? "Corrigiendo..." : "Corregir marcador"}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => submitScore(m.id)}
-                        disabled={busy}
-                        className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900 text-white py-2 rounded-lg text-sm font-medium transition-colors"
-                      >
-                        {busy ? "Guardando..." : "Guardar marcador"}
-                      </button>
-                    )}
-                  </div>
-                  {result && (
-                    <p className={`text-xs mt-2 ${result.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>
-                      {result}
-                    </p>
-                  )}
+                    </button>
+                  );
+                })}
+                {matchFilter === "upcoming" && upcomingMatches.length > 0 && (
+                  <button
+                    onClick={() => navigator.clipboard.writeText(String(upcomingMatches.length))}
+                    className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 transition-colors"
+                    title="Copiar cantidad"
+                  >
+                    📋 Copiar número
+                  </button>
+                )}
+              </div>
+
+              {visibleMatches.length === 0 ? (
+                <p className="text-slate-500 text-sm">No hay partidos en esta categoría.</p>
+              ) : (
+                <div className="space-y-3">
+                  {visibleMatches.map((m) => {
+                    const kickoff = new Date(m.kickoff);
+                    const input = scoreInputs[m.id] ?? { home: "", away: "" };
+                    const busy = scoringMatch[m.id] ?? false;
+                    const result = scoreResult[m.id];
+                    const finished = m.status === "FINISHED";
+                    return (
+                      <div key={m.id} className={`bg-slate-800 rounded-xl border p-4 ${finished ? "border-slate-700 opacity-80" : "border-slate-700"}`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-white font-semibold text-sm">
+                              {m.homeTeam.code} vs {m.awayTeam.code}
+                            </span>
+                            {m.manualScore && (
+                              <span className="text-xs bg-amber-600 text-white px-2 py-0.5 rounded-full">Manual</span>
+                            )}
+                            {finished && (
+                              <span className="text-xs bg-slate-600 text-slate-300 px-2 py-0.5 rounded-full">Terminado</span>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xs text-slate-400">
+                              {kickoff.toLocaleDateString("es", { day: "2-digit", month: "short" })}{" "}
+                              {kickoff.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
+                            </div>
+                            {m.scoreUpdatedAt && (
+                              <div className="text-xs text-slate-500 mt-0.5">
+                                Resultado: {new Date(m.scoreUpdatedAt).toLocaleDateString("es", { day: "2-digit", month: "short" })}{" "}
+                                {new Date(m.scoreUpdatedAt).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={0}
+                              max={30}
+                              placeholder="0"
+                              value={input.home}
+                              onChange={(e) =>
+                                setScoreInputs((s) => ({ ...s, [m.id]: { ...s[m.id], home: e.target.value } }))
+                              }
+                              className="w-14 bg-slate-900 border border-slate-600 text-white text-center rounded-lg px-2 py-2 text-sm outline-none"
+                            />
+                            <span className="text-slate-400 font-bold">—</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={30}
+                              placeholder="0"
+                              value={input.away}
+                              onChange={(e) =>
+                                setScoreInputs((s) => ({ ...s, [m.id]: { ...s[m.id], away: e.target.value } }))
+                              }
+                              className="w-14 bg-slate-900 border border-slate-600 text-white text-center rounded-lg px-2 py-2 text-sm outline-none"
+                            />
+                          </div>
+                          {finished ? (
+                            <button
+                              onClick={() => {
+                                if (confirm(`¿Corregir marcador? Se recalcularán todos los puntos.`))
+                                  submitScore(m.id, true);
+                              }}
+                              disabled={busy}
+                              className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:bg-amber-900 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                            >
+                              {busy ? "Corrigiendo..." : "Corregir marcador"}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => submitScore(m.id)}
+                              disabled={busy}
+                              className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                            >
+                              {busy ? "Guardando..." : "Guardar marcador"}
+                            </button>
+                          )}
+                        </div>
+                        {result && (
+                          <p className={`text-xs mt-2 ${result.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>
+                            {result}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
-        )}
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* WhatsApp */}

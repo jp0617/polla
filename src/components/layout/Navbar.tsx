@@ -9,6 +9,7 @@ const navItems = [
   { href: "/matches", label: "Partidos" },
   { href: "/standings", label: "Clasificación" },
   { href: "/history", label: "Mis Pronósticos" },
+  { href: "/predictions", label: "Grupo" },
   { href: "/profile", label: "Perfil" },
 ];
 
