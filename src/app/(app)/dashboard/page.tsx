@@ -192,6 +192,7 @@ interface MatchCardProps {
     stage: string;
     homeScore: number | null;
     awayScore: number | null;
+    minute: number | null;
     homeTeam: { name: string; shortName: string; crest: string | null };
     awayTeam: { name: string; shortName: string; crest: string | null };
   };
@@ -200,6 +201,11 @@ interface MatchCardProps {
 
 function MatchCard({ match, isLive }: MatchCardProps) {
   const kickoffTime = fmtTime(match.kickoff);
+  const liveLabel = match.status === "PAUSED"
+    ? "● Medio tiempo"
+    : match.minute != null
+      ? `● ${match.minute}'`
+      : "● En juego";
   return (
     <div className={`bg-slate-800 rounded-xl p-4 border ${isLive ? "border-red-700" : "border-slate-700"} flex items-center gap-3`}>
       <TeamDisplay team={match.homeTeam} />
@@ -210,7 +216,7 @@ function MatchCard({ match, isLive }: MatchCardProps) {
           <div className="text-sm text-slate-400">{kickoffTime}</div>
         )}
         <div className={`text-xs mt-0.5 ${isLive ? "text-red-400" : "text-slate-500"}`}>
-          {isLive ? "● En juego" : match.status === "FINISHED" ? "FT" : match.stage.replace(/_/g, " ")}
+          {isLive ? liveLabel : match.status === "FINISHED" ? "FT" : match.stage.replace(/_/g, " ")}
         </div>
       </div>
       <TeamDisplay team={match.awayTeam} align="right" />
