@@ -92,6 +92,7 @@ model Match {
   awayScore   Int?
   manualScore     Boolean      @default(false)
   scoreUpdatedAt  DateTime?
+  reminderSentAt  DateTime?
   predictions     Prediction[]
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
