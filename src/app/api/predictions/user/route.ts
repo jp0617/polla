@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
   const predictions = await prisma.prediction.findMany({
     where: {
       userId: targetUserId,
-      match: { status: { in: ["FINISHED", "IN_PLAY", "PAUSED"] } },
+      status: { in: ["LOCKED", "SCORED"] },
     },
     include: {
       match: {
