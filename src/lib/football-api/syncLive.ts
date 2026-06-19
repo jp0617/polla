@@ -36,6 +36,7 @@ export async function syncLiveScores(): Promise<{ updated: number }> {
         stage,
         homeScore: homeScore ?? undefined,
         awayScore: awayScore ?? undefined,
+        minute: m.minute ?? null,
         ...(homeScore !== null ? { scoreUpdatedAt: new Date() } : {}),
       },
     });

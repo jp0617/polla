@@ -2,7 +2,7 @@ services:
   - type: web
     name: polla
     runtime: node
-    plan: free
+    plan: Starter
     buildCommand: npm install && npx prisma generate && npm run build
     startCommand: npm start
     healthCheckPath: /

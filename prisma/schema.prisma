@@ -90,6 +90,7 @@ model Match {
   status      MatchStatus  @default(SCHEDULED)
   homeScore   Int?
   awayScore   Int?
+  minute      Int?
   manualScore     Boolean      @default(false)
   scoreUpdatedAt  DateTime?
   reminderSentAt  DateTime?

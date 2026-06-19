@@ -28,6 +28,7 @@ interface Match {
   status: string;
   homeScore: number | null;
   awayScore: number | null;
+  minute: number | null;
   scoreUpdatedAt: string | null;
   isLocked: boolean;
   homeTeam: Team;
@@ -206,7 +207,7 @@ function MatchPredictionCard({
         {/* Stage badge */}
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs text-slate-500">{formatStage(match.stage)}{match.group ? ` — Grupo ${match.group}` : ""}</span>
-          <StatusBadge status={match.status} isLocked={match.isLocked} />
+          <StatusBadge status={match.status} isLocked={match.isLocked} minute={match.minute} />
         </div>
 
         {/* Match */}
@@ -301,9 +302,10 @@ function TeamCol({ team, align = "left" }: { team: Team; align?: "left" | "right
   );
 }
 
-function StatusBadge({ status, isLocked }: { status: string; isLocked: boolean }) {
+function StatusBadge({ status, isLocked, minute }: { status: string; isLocked: boolean; minute?: number | null }) {
   if (status === "IN_PLAY" || status === "PAUSED") {
-    return <span className="text-xs bg-red-900 text-red-300 px-2 py-0.5 rounded-full">● En vivo</span>;
+    const label = status === "PAUSED" ? "Medio tiempo" : minute != null ? `${minute}'` : "En vivo";
+    return <span className="text-xs bg-red-900 text-red-300 px-2 py-0.5 rounded-full">● {label}</span>;
   }
   if (status === "FINISHED") {
     return <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full">Finalizado</span>;

@@ -14,6 +14,7 @@ export interface FootballApiMatch {
   status: string;
   stage: string;
   group: string | null;
+  minute: number | null;
   score: {
     fullTime: { home: number | null; away: number | null };
     halfTime: { home: number | null; away: number | null };
