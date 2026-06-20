@@ -65,14 +65,12 @@ export async function sendMatchReminders(): Promise<{ matches: number; messages:
         if (!user.phone) continue;
 
         const pred = user.predictions[0] ?? null;
-        const predLine = pred
-          ? `Tu pronóstico: *${pred.homeScore} - ${pred.awayScore}*`
-          : `⏰ ¡Aún puedes hacer tu pronóstico!`;
+        if (pred) continue;
 
         const message =
           `⚽ *Recordatorio* — el partido empieza en ~15 minutos:\n` +
           `*${home} vs ${away}*\n` +
-          predLine;
+          `⏰ ¡Aún no has puesto tu pronóstico!`;
 
         try {
           await sendWhatsAppMessage(code.adminId, user.phone, message);

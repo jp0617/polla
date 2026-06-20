@@ -207,7 +207,7 @@ function MatchPredictionCard({
         {/* Stage badge */}
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs text-slate-500">{formatStage(match.stage)}{match.group ? ` — Grupo ${match.group}` : ""}</span>
-          <StatusBadge status={match.status} isLocked={match.isLocked} minute={match.minute} />
+          <StatusBadge status={match.status} isLocked={match.isLocked} minute={match.minute} kickoff={match.kickoff} />
         </div>
 
         {/* Match */}
@@ -302,9 +302,17 @@ function TeamCol({ team, align = "left" }: { team: Team; align?: "left" | "right
   );
 }
 
-function StatusBadge({ status, isLocked, minute }: { status: string; isLocked: boolean; minute?: number | null }) {
+function StatusBadge({ status, isLocked, minute, kickoff }: { status: string; isLocked: boolean; minute?: number | null; kickoff?: string }) {
   if (status === "IN_PLAY" || status === "PAUSED") {
-    const label = status === "PAUSED" ? "Medio tiempo" : minute != null ? `${minute}'` : "En vivo";
+    let label = "En vivo";
+    if (status === "PAUSED") {
+      label = "Medio tiempo";
+    } else if (minute != null) {
+      label = `${minute}'`;
+    } else if (kickoff) {
+      const elapsed = Math.floor((Date.now() - new Date(kickoff).getTime()) / 60000);
+      if (elapsed > 0 && elapsed <= 120) label = `~${elapsed}'`;
+    }
     return <span className="text-xs bg-red-900 text-red-300 px-2 py-0.5 rounded-full">● {label}</span>;
   }
   if (status === "FINISHED") {

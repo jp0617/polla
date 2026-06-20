@@ -201,11 +201,16 @@ interface MatchCardProps {
 
 function MatchCard({ match, isLive }: MatchCardProps) {
   const kickoffTime = fmtTime(match.kickoff);
-  const liveLabel = match.status === "PAUSED"
-    ? "● Medio tiempo"
-    : match.minute != null
-      ? `● ${match.minute}'`
-      : "● En juego";
+  let liveMinute = "";
+  if (match.status === "PAUSED") {
+    liveMinute = "Medio tiempo";
+  } else if (match.minute != null) {
+    liveMinute = `${match.minute}'`;
+  } else {
+    const elapsed = Math.floor((Date.now() - new Date(match.kickoff).getTime()) / 60000);
+    liveMinute = elapsed > 0 && elapsed <= 120 ? `~${elapsed}'` : "En juego";
+  }
+  const liveLabel = `● ${liveMinute}`;
   return (
     <div className={`bg-slate-800 rounded-xl p-4 border ${isLive ? "border-red-700" : "border-slate-700"} flex items-center gap-3`}>
       <TeamDisplay team={match.homeTeam} />
