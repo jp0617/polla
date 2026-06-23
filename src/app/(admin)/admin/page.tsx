@@ -7,6 +7,10 @@ interface ScoringConfig {
   correctWinner: number;
   correctDraw: number;
   bonusPhaseAdvance: number;
+  exactScoreKO: number;
+  correctWinnerKO: number;
+  correctAdvancingKO: number;
+  bonusPhaseAdvanceKO: number;
   championBonus: number;
   lockMinutes: number;
   championTeamId: string | null;
@@ -45,8 +49,9 @@ export default function AdminPage() {
   const [saved, setSaved] = useState<Record<string, boolean>>({});
 
   const [scoring, setScoring] = useState<ScoringConfig>({
-    exactScore: 5, correctWinner: 3, correctDraw: 2, bonusPhaseAdvance: 2, championBonus: 10, lockMinutes: 5,
-    championTeamId: null, championBonusGiven: false,
+    exactScore: 5, correctWinner: 3, correctDraw: 2, bonusPhaseAdvance: 2,
+    exactScoreKO: 10, correctWinnerKO: 6, correctAdvancingKO: 4, bonusPhaseAdvanceKO: 4,
+    championBonus: 10, lockMinutes: 5, championTeamId: null, championBonusGiven: false,
   });
   const [championTeamId, setChampionTeamId] = useState("");
   const [awardingChampion, setAwardingChampion] = useState(false);
@@ -68,16 +73,19 @@ export default function AdminPage() {
     id: string;
     kickoff: string;
     status: string;
+    stage: string;
     manualScore: boolean;
     homeScore: number | null;
     awayScore: number | null;
+    advancingTeamId: string | null;
     scoreUpdatedAt: string | null;
-    homeTeam: { name: string; code: string; crest: string | null };
-    awayTeam: { name: string; code: string; crest: string | null };
+    homeTeam: { id: string; name: string; code: string; crest: string | null };
+    awayTeam: { id: string; name: string; code: string; crest: string | null };
   }
   const [matches, setMatches] = useState<AdminMatch[]>([]);
   const [matchFilter, setMatchFilter] = useState<"today" | "finished" | "upcoming">("today");
   const [scoreInputs, setScoreInputs] = useState<Record<string, { home: string; away: string }>>({});
+  const [advancingInputs, setAdvancingInputs] = useState<Record<string, string | null>>({});
   const [scoringMatch, setScoringMatch] = useState<Record<string, boolean>>({});
   const [scoreResult, setScoreResult] = useState<Record<string, string>>({});
 
@@ -109,13 +117,16 @@ export default function AdminPage() {
       const ms: AdminMatch[] = matchesData.matches ?? [];
       setMatches(ms);
       const inputs: Record<string, { home: string; away: string }> = {};
+      const advInputs: Record<string, string | null> = {};
       for (const m of ms) {
         inputs[m.id] = {
           home: m.homeScore !== null ? String(m.homeScore) : "",
           away: m.awayScore !== null ? String(m.awayScore) : "",
         };
+        advInputs[m.id] = m.advancingTeamId ?? null;
       }
       setScoreInputs(inputs);
+      setAdvancingInputs(advInputs);
       setLoading(false);
     });
   }, []);
@@ -216,10 +227,11 @@ export default function AdminPage() {
     if (isNaN(home) || isNaN(away)) return;
     setScoringMatch((s) => ({ ...s, [matchId]: true }));
     setScoreResult((s) => ({ ...s, [matchId]: "" }));
+    const advancingTeamId = advancingInputs[matchId] ?? null;
     const res = await fetch(`/api/admin/matches/${matchId}/score`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ homeScore: home, awayScore: away, force }),
+      body: JSON.stringify({ homeScore: home, awayScore: away, advancingTeamId, force }),
     });
     const data = await res.json();
     setScoringMatch((s) => ({ ...s, [matchId]: false }));
@@ -355,6 +367,12 @@ export default function AdminPage() {
                     const busy = scoringMatch[m.id] ?? false;
                     const result = scoreResult[m.id];
                     const finished = m.status === "FINISHED";
+                    const KO_STAGES = new Set(["ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
+                    const isKO = KO_STAGES.has(m.stage);
+                    const homeVal = parseInt(input.home, 10);
+                    const awayVal = parseInt(input.away, 10);
+                    const isDraw = !isNaN(homeVal) && !isNaN(awayVal) && homeVal === awayVal;
+                    const showAdvancing = isKO && isDraw;
                     return (
                       <div key={m.id} className={`bg-slate-800 rounded-xl border p-4 ${finished ? "border-slate-700 opacity-80" : "border-slate-700"}`}>
                         <div className="flex items-center justify-between mb-3">
@@ -382,6 +400,7 @@ export default function AdminPage() {
                             )}
                           </div>
                         </div>
+                        <div className="space-y-3">
                         <div className="flex items-center gap-3">
                           <div className="flex items-center gap-2">
                             <input
@@ -390,9 +409,10 @@ export default function AdminPage() {
                               max={30}
                               placeholder="0"
                               value={input.home}
-                              onChange={(e) =>
-                                setScoreInputs((s) => ({ ...s, [m.id]: { ...s[m.id], home: e.target.value } }))
-                              }
+                              onChange={(e) => {
+                                setScoreInputs((s) => ({ ...s, [m.id]: { ...s[m.id], home: e.target.value } }));
+                                setAdvancingInputs((s) => ({ ...s, [m.id]: null }));
+                              }}
                               className="w-14 bg-slate-900 border border-slate-600 text-white text-center rounded-lg px-2 py-2 text-sm outline-none"
                             />
                             <span className="text-slate-400 font-bold">—</span>
@@ -402,9 +422,10 @@ export default function AdminPage() {
                               max={30}
                               placeholder="0"
                               value={input.away}
-                              onChange={(e) =>
-                                setScoreInputs((s) => ({ ...s, [m.id]: { ...s[m.id], away: e.target.value } }))
-                              }
+                              onChange={(e) => {
+                                setScoreInputs((s) => ({ ...s, [m.id]: { ...s[m.id], away: e.target.value } }));
+                                setAdvancingInputs((s) => ({ ...s, [m.id]: null }));
+                              }}
                               className="w-14 bg-slate-900 border border-slate-600 text-white text-center rounded-lg px-2 py-2 text-sm outline-none"
                             />
                           </div>
@@ -428,6 +449,37 @@ export default function AdminPage() {
                               {busy ? "Guardando..." : "Guardar marcador"}
                             </button>
                           )}
+                        </div>
+                        {showAdvancing && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs text-amber-400">¿Quién avanza?</span>
+                            {[m.homeTeam, m.awayTeam].map((team) => (
+                              <button
+                                key={team.id}
+                                onClick={() => setAdvancingInputs((s) => ({ ...s, [m.id]: team.id }))}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors ${
+                                  advancingInputs[m.id] === team.id
+                                    ? "border-amber-500 bg-amber-900/40 text-amber-300"
+                                    : "border-slate-600 bg-slate-700 text-slate-300 hover:border-slate-400"
+                                }`}
+                              >
+                                {team.crest && (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={team.crest} alt="" className="w-4 h-4 object-contain" />
+                                )}
+                                {team.code}
+                              </button>
+                            ))}
+                            {advancingInputs[m.id] && (
+                              <button
+                                onClick={() => setAdvancingInputs((s) => ({ ...s, [m.id]: null }))}
+                                className="text-xs text-slate-500 hover:text-slate-300"
+                              >
+                                ✕ Limpiar
+                              </button>
+                            )}
+                          </div>
+                        )}
                         </div>
                         {result && (
                           <p className={`text-xs mt-2 ${result.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>
@@ -525,34 +577,51 @@ export default function AdminPage() {
         <p className="text-slate-400 text-sm mt-1 mb-4">
           Se aplican en la próxima sincronización de resultados.
         </p>
-        <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {(
-              [
-                { key: "exactScore" as const, label: "Marcador exacto" },
-                { key: "correctWinner" as const, label: "Ganador correcto" },
-                { key: "correctDraw" as const, label: "Empate correcto" },
-                { key: "bonusPhaseAdvance" as const, label: "Bonus fase" },
-                { key: "championBonus" as const, label: "Bonus campeón" },
-                { key: "lockMinutes" as const, label: "Cierre antes del partido" },
-              ] as { key: "exactScore" | "correctWinner" | "correctDraw" | "bonusPhaseAdvance" | "championBonus" | "lockMinutes"; label: string }[]
-            ).map(({ key, label }) => (
-              <div key={key} className="flex flex-col gap-1">
-                <label className="text-xs text-slate-400 font-medium">{label}</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={0}
-                    value={scoring[key]}
-                    onChange={(e) =>
-                      setScoring((s) => ({ ...s, [key]: parseInt(e.target.value) || 0 }))
-                    }
-                    className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500"
-                  />
-                  <span className="text-slate-400 text-sm">{key === "lockMinutes" ? "min" : "pts"}</span>
-                </div>
-              </div>
-            ))}
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 space-y-6">
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Fase de grupos</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {(
+                [
+                  { key: "exactScore" as const, label: "Marcador exacto" },
+                  { key: "correctWinner" as const, label: "Ganador correcto" },
+                  { key: "correctDraw" as const, label: "Empate correcto" },
+                  { key: "bonusPhaseAdvance" as const, label: "Bonus fase" },
+                ] as { key: keyof ScoringConfig & string; label: string }[]
+              ).map(({ key, label }) => (
+                <ScoringField key={key} fieldKey={key} label={label} value={scoring[key as keyof ScoringConfig] as number} unit="pts" onChange={(v) => setScoring((s) => ({ ...s, [key]: v }))} />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Fase eliminatoria (KO)</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {(
+                [
+                  { key: "exactScoreKO" as const, label: "Marcador exacto" },
+                  { key: "correctWinnerKO" as const, label: "Ganador correcto" },
+                  { key: "correctAdvancingKO" as const, label: "Empate + avanza correcto" },
+                  { key: "bonusPhaseAdvanceKO" as const, label: "Bonus fase" },
+                ] as { key: keyof ScoringConfig & string; label: string }[]
+              ).map(({ key, label }) => (
+                <ScoringField key={key} fieldKey={key} label={label} value={scoring[key as keyof ScoringConfig] as number} unit="pts" onChange={(v) => setScoring((s) => ({ ...s, [key]: v }))} />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">General</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {(
+                [
+                  { key: "championBonus" as const, label: "Bonus campeón", unit: "pts" },
+                  { key: "lockMinutes" as const, label: "Cierre antes del partido", unit: "min" },
+                ] as { key: keyof ScoringConfig & string; label: string; unit: string }[]
+              ).map(({ key, label, unit }) => (
+                <ScoringField key={key} fieldKey={key} label={label} value={scoring[key as keyof ScoringConfig] as number} unit={unit} onChange={(v) => setScoring((s) => ({ ...s, [key]: v }))} />
+              ))}
+            </div>
           </div>
           <div className="mt-4 flex justify-end">
             <button
@@ -849,6 +918,35 @@ export default function AdminPage() {
       <p className="text-xs text-slate-500">
         Total = puntos de predicciones + bonus de fases + puntos manuales
       </p>
+    </div>
+  );
+}
+
+function ScoringField({
+  label,
+  value,
+  unit,
+  onChange,
+}: {
+  fieldKey: string;
+  label: string;
+  value: number;
+  unit: string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs text-slate-400 font-medium">{label}</label>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          min={0}
+          value={value}
+          onChange={(e) => onChange(parseInt(e.target.value) || 0)}
+          className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500"
+        />
+        <span className="text-slate-400 text-sm">{unit}</span>
+      </div>
     </div>
   );
 }

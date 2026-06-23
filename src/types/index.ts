@@ -16,8 +16,10 @@ export interface FootballApiMatch {
   group: string | null;
   minute: number | null;
   score: {
+    winner: "HOME_TEAM" | "AWAY_TEAM" | "DRAW" | null;
     fullTime: { home: number | null; away: number | null };
     halfTime: { home: number | null; away: number | null };
+    extraTime: { home: number | null; away: number | null } | null;
   };
   homeTeam: FootballApiTeam;
   awayTeam: FootballApiTeam;

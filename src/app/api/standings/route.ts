@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
           isCurrentUser: user.id === userId,
         };
       })
-      .sort((a, b) => b.totalPoints - a.totalPoints || a.name.localeCompare(b.name))
+      .sort((a, b) => b.totalPoints - a.totalPoints || b.exactScores - a.exactScores || a.name.localeCompare(b.name))
       .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
 
     return NextResponse.json({ leaderboard });
@@ -114,6 +114,10 @@ export async function GET(req: NextRequest) {
         correctWinner: true,
         correctDraw: true,
         bonusPhaseAdvance: true,
+        exactScoreKO: true,
+        correctWinnerKO: true,
+        correctAdvancingKO: true,
+        bonusPhaseAdvanceKO: true,
       },
     }),
   ]);
@@ -124,6 +128,10 @@ export async function GET(req: NextRequest) {
     correctWinner: groupCode?.correctWinner ?? globalConfig?.correctWinner ?? 3,
     correctDraw: groupCode?.allowDraws === false ? 0 : (groupCode?.correctDraw ?? globalConfig?.correctDraw ?? 2),
     bonusPhaseAdvance: groupCode?.bonusPhaseAdvance ?? globalConfig?.bonusPhaseAdvance ?? 2,
+    exactScoreKO: globalConfig?.exactScoreKO ?? 10,
+    correctWinnerKO: globalConfig?.correctWinnerKO ?? 6,
+    correctAdvancingKO: globalConfig?.correctAdvancingKO ?? 2,
+    bonusPhaseAdvanceKO: globalConfig?.bonusPhaseAdvanceKO ?? 4,
   };
 
   const leaderboard = memberships
@@ -162,7 +170,7 @@ export async function GET(req: NextRequest) {
         isCurrentUser: m.user.id === userId,
       };
     })
-    .sort((a, b) => b.totalPoints - a.totalPoints || a.name.localeCompare(b.name))
+    .sort((a, b) => b.totalPoints - a.totalPoints || b.exactScores - a.exactScores || a.name.localeCompare(b.name))
     .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
 
   return NextResponse.json({

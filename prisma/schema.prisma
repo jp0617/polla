@@ -72,6 +72,8 @@ model Team {
   eliminated          Boolean        @default(false)
   homeMatches         Match[]        @relation("HomeTeam")
   awayMatches         Match[]        @relation("AwayTeam")
+  matchesAdvanced     Match[]        @relation("MatchAdvancingTeam")
+  predictionAdvances  Prediction[]   @relation("PredictionAdvancingTeam")
   memberFavorites     Membership[]   @relation("MemberFavoriteTeam")
   memberChampionPicks Membership[]   @relation("MemberChampionPick")
   phaseAdvances       PhaseAdvance[]
@@ -90,7 +92,11 @@ model Match {
   status      MatchStatus  @default(SCHEDULED)
   homeScore   Int?
   awayScore   Int?
+  homeScoreET Int?
+  awayScoreET Int?
   minute      Int?
+  advancingTeamId String?
+  advancingTeam   Team?    @relation("MatchAdvancingTeam", fields: [advancingTeamId], references: [id])
   manualScore     Boolean      @default(false)
   scoreUpdatedAt  DateTime?
   reminderSentAt  DateTime?
@@ -110,6 +116,8 @@ model Prediction {
   match     Match            @relation(fields: [matchId], references: [id], onDelete: Cascade)
   homeScore Int
   awayScore Int
+  advancingTeamId String?
+  advancingTeam   Team?    @relation("PredictionAdvancingTeam", fields: [advancingTeamId], references: [id])
   points        Int?
   status        PredictionStatus @default(PENDING)
   wppSentAt     DateTime?
@@ -138,6 +146,10 @@ model ScoringConfig {
   correctWinner      Int      @default(3)
   correctDraw        Int      @default(2)
   bonusPhaseAdvance  Int      @default(2)
+  exactScoreKO        Int      @default(10)
+  correctWinnerKO     Int      @default(6)
+  correctAdvancingKO  Int      @default(4)
+  bonusPhaseAdvanceKO Int      @default(4)
   championBonus      Int      @default(10)
   lockMinutes        Int      @default(5)
   championTeamId     String?

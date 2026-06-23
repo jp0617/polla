@@ -24,6 +24,10 @@ const schema = z.object({
   correctWinner: z.number().int().min(0),
   correctDraw: z.number().int().min(0),
   bonusPhaseAdvance: z.number().int().min(0),
+  exactScoreKO: z.number().int().min(0),
+  correctWinnerKO: z.number().int().min(0),
+  correctAdvancingKO: z.number().int().min(0),
+  bonusPhaseAdvanceKO: z.number().int().min(0),
   championBonus: z.number().int().min(0),
   lockMinutes: z.number().int().min(0),
 });

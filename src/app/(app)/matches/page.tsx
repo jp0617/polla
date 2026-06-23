@@ -15,10 +15,13 @@ interface Prediction {
   id: string;
   homeScore: number;
   awayScore: number;
+  advancingTeamId: string | null;
   points: number | null;
   status: string;
   userUpdatedAt: string | null;
 }
+
+const KO_STAGES = new Set(["ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
 
 interface Match {
   id: string;
@@ -28,6 +31,8 @@ interface Match {
   status: string;
   homeScore: number | null;
   awayScore: number | null;
+  homeScoreET: number | null;
+  awayScoreET: number | null;
   minute: number | null;
   scoreUpdatedAt: string | null;
   isLocked: boolean;
@@ -70,13 +75,14 @@ export default function MatchesPage() {
   async function savePrediction(
     matchId: string,
     homeScore: number,
-    awayScore: number
+    awayScore: number,
+    advancingTeamId?: string | null
   ) {
     setSaving(matchId);
     await fetch("/api/predictions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ matchId, homeScore, awayScore }),
+      body: JSON.stringify({ matchId, homeScore, awayScore, advancingTeamId: advancingTeamId ?? null }),
     });
     setSaving(null);
     loadMatches();
@@ -173,7 +179,7 @@ export default function MatchesPage() {
                   key={match.id}
                   match={match}
                   saving={saving === match.id}
-                  onSave={(h, a) => savePrediction(match.id, h, a)}
+                  onSave={(h, a, adv) => savePrediction(match.id, h, a, adv)}
                 />
               ))}
             </div>
@@ -191,13 +197,19 @@ function MatchPredictionCard({
 }: {
   match: Match;
   saving: boolean;
-  onSave: (home: number, away: number) => void;
+  onSave: (home: number, away: number, advancingTeamId?: string | null) => void;
 }) {
   const [home, setHome] = useState(match.userPrediction?.homeScore ?? 0);
   const [away, setAway] = useState(match.userPrediction?.awayScore ?? 0);
+  const [advancingTeamId, setAdvancingTeamId] = useState<string | null>(
+    match.userPrediction?.advancingTeamId ?? null
+  );
   const isFinished = match.status === "FINISHED";
   const isLive = match.status === "IN_PLAY" || match.status === "PAUSED";
   const canPredict = !match.isLocked && !isFinished && !isLive;
+  const isKO = KO_STAGES.has(match.stage);
+  const isDraw = home === away;
+  const needsAdvancing = isKO && isDraw && canPredict;
 
   const points = match.userPrediction?.points;
 
@@ -216,7 +228,7 @@ function MatchPredictionCard({
           <div className="flex-1 text-center">
             {isFinished || isLive ? (
               <div className="text-2xl font-bold text-white">
-                {match.homeScore} — {match.awayScore}
+                {match.homeScoreET ?? match.homeScore} — {match.awayScoreET ?? match.awayScore}
               </div>
             ) : (
               <div className="text-slate-400 text-sm">
@@ -234,32 +246,67 @@ function MatchPredictionCard({
 
         {/* Prediction input */}
         {canPredict && (
-          <div className="mt-4 flex items-center gap-2 justify-center">
-            <span className="text-xs text-slate-400">Tu pronóstico:</span>
-            <ScoreInput value={home} onChange={setHome} />
-            <span className="text-slate-500 font-bold">—</span>
-            <ScoreInput value={away} onChange={setAway} />
-            <button
-              onClick={() => onSave(home, away)}
-              disabled={saving}
-              className="ml-2 bg-green-600 hover:bg-green-500 disabled:bg-green-800 text-white text-sm px-4 py-1.5 rounded-lg transition-colors"
-            >
-              {saving ? "..." : match.userPrediction ? "Actualizar" : "Guardar"}
-            </button>
+          <div className="mt-4 space-y-3">
+            <div className="flex items-center gap-2 justify-center">
+              <span className="text-xs text-slate-400">Tu pronóstico:</span>
+              <ScoreInput value={home} onChange={(v) => { setHome(v); if (v !== away) setAdvancingTeamId(null); }} />
+              <span className="text-slate-500 font-bold">—</span>
+              <ScoreInput value={away} onChange={(v) => { setAway(v); if (home !== v) setAdvancingTeamId(null); }} />
+              <button
+                onClick={() => onSave(home, away, needsAdvancing ? advancingTeamId : null)}
+                disabled={saving || (needsAdvancing && !advancingTeamId)}
+                className="ml-2 bg-green-600 hover:bg-green-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm px-4 py-1.5 rounded-lg transition-colors"
+              >
+                {saving ? "..." : match.userPrediction ? "Actualizar" : "Guardar"}
+              </button>
+            </div>
+            {needsAdvancing && (
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-xs text-amber-400">⚠️ Empate en eliminatoria — ¿quién avanza en penales?</span>
+                <div className="flex gap-2">
+                  {[
+                    { id: match.homeTeam.id, name: match.homeTeam.shortName, crest: match.homeTeam.crest },
+                    { id: match.awayTeam.id, name: match.awayTeam.shortName, crest: match.awayTeam.crest },
+                  ].map((team) => (
+                    <button
+                      key={team.id}
+                      onClick={() => setAdvancingTeamId(team.id)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                        advancingTeamId === team.id
+                          ? "border-amber-500 bg-amber-900/40 text-amber-300"
+                          : "border-slate-600 bg-slate-700 text-slate-300 hover:border-slate-400"
+                      }`}
+                    >
+                      {team.crest && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={team.crest} alt="" className="w-5 h-5 object-contain" />
+                      )}
+                      {team.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Saved prediction result */}
         {match.userPrediction && (isFinished || match.isLocked) && (
-          <div className="mt-3 flex items-center justify-center gap-3 text-sm">
+          <div className="mt-3 flex flex-col items-center gap-1 text-sm">
+            <div className="flex items-center gap-3">
             <span className="text-slate-400">
               Tu pronóstico: {match.userPrediction.homeScore} — {match.userPrediction.awayScore}
+              {match.userPrediction.advancingTeamId && (() => {
+                const t = match.userPrediction!.advancingTeamId === match.homeTeam.id ? match.homeTeam : match.awayTeam;
+                return <span className="text-amber-400 ml-1">(avanza {t.shortName})</span>;
+              })()}
             </span>
             {isFinished && points !== null && points !== undefined && (
-              <span className={`font-bold px-2 py-0.5 rounded ${points === 5 ? "bg-yellow-900 text-yellow-300" : points === 3 ? "bg-green-900 text-green-300" : points === 1 ? "bg-blue-900 text-blue-300" : "bg-slate-700 text-slate-400"}`}>
+              <span className={`font-bold px-2 py-0.5 rounded ${points >= 10 ? "bg-yellow-900 text-yellow-300" : points >= 6 ? "bg-green-900 text-green-300" : points >= 3 ? "bg-blue-900 text-blue-300" : "bg-slate-700 text-slate-400"}`}>
                 {points > 0 ? `+${points} pts` : "0 pts"}
               </span>
             )}
+            </div>
           </div>
         )}
 

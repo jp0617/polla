@@ -68,7 +68,12 @@ export default async function DashboardPage() {
         where: { invitationCodeId: firstMembership.invitationCodeId },
         select: {
           bonusPoints: true,
-          user: { select: { id: true, name: true, totalPoints: true, manualPoints: true } },
+          user: {
+            select: {
+              id: true, name: true, totalPoints: true, manualPoints: true,
+              predictions: { where: { status: "SCORED" }, select: { points: true } },
+            },
+          },
         },
       });
       const sorted = groupMembers
@@ -76,8 +81,9 @@ export default async function DashboardPage() {
           userId: m.user.id,
           name: m.user.name,
           total: m.user.totalPoints + m.user.manualPoints + m.bonusPoints,
+          exactScores: m.user.predictions.filter((p) => p.points !== null && p.points >= 5).length,
         }))
-        .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+        .sort((a, b) => b.total - a.total || b.exactScores - a.exactScores || a.name.localeCompare(b.name));
       userRank = sorted.findIndex((m) => m.userId === session.user.id) + 1 || 1;
     }
   }
@@ -192,7 +198,9 @@ interface MatchCardProps {
     stage: string;
     homeScore: number | null;
     awayScore: number | null;
-    minute: number | null;
+    homeScoreET?: number | null;
+    awayScoreET?: number | null;
+    minute?: number | null;
     homeTeam: { name: string; shortName: string; crest: string | null };
     awayTeam: { name: string; shortName: string; crest: string | null };
   };
@@ -216,7 +224,9 @@ function MatchCard({ match, isLive }: MatchCardProps) {
       <TeamDisplay team={match.homeTeam} />
       <div className="flex-1 text-center">
         {match.status === "FINISHED" || isLive ? (
-          <div className="text-xl font-bold text-white">{match.homeScore ?? 0} — {match.awayScore ?? 0}</div>
+          <div className="text-xl font-bold text-white">
+            {match.homeScoreET ?? match.homeScore ?? 0} — {match.awayScoreET ?? match.awayScore ?? 0}
+          </div>
         ) : (
           <div className="text-sm text-slate-400">{kickoffTime}</div>
         )}

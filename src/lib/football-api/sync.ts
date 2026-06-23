@@ -8,6 +8,7 @@ import {
 import { getScoringConfig } from "@/lib/scoring/config";
 import { scoreMatchPredictions } from "@/lib/scoring/scoreMatchPredictions";
 import { notifyMatchResult } from "@/lib/whatsapp/notifyMatchResult";
+import { isKnockoutStage } from "@/lib/scoring/engine";
 
 export async function syncMatches(): Promise<{
   updated: number;
@@ -85,13 +86,18 @@ export async function syncMatches(): Promise<{
         awayScore: apiMatch.score.fullTime.away ?? undefined,
       },
       update: existingMatch?.manualScore
-        ? { stage } // only update stage if score was set manually
+        ? { stage }
         : {
             status,
             homeScore: apiMatch.score.fullTime.home ?? undefined,
             awayScore: apiMatch.score.fullTime.away ?? undefined,
+            homeScoreET: apiMatch.score.extraTime?.home ?? null,
+            awayScoreET: apiMatch.score.extraTime?.away ?? null,
             stage,
             ...(apiMatch.score.fullTime.home !== null ? { scoreUpdatedAt: new Date() } : {}),
+            ...(isKnockoutStage(stage) && apiMatch.score.winner && apiMatch.score.winner !== "DRAW"
+              ? { advancingTeamId: apiMatch.score.winner === "HOME_TEAM" ? homeTeam.id : awayTeam.id }
+              : {}),
           },
     });
 

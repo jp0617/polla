@@ -8,6 +8,7 @@ import { notifyMatchResult } from "@/lib/whatsapp/notifyMatchResult";
 const schema = z.object({
   homeScore: z.number().int().min(0).max(30),
   awayScore: z.number().int().min(0).max(30),
+  advancingTeamId: z.string().nullable().optional(),
   // force=true allows correcting an already-finished match
   force: z.boolean().default(false),
 });
@@ -29,7 +30,7 @@ export async function POST(
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
   }
 
-  const { homeScore, awayScore, force } = parsed.data;
+  const { homeScore, awayScore, advancingTeamId, force } = parsed.data;
 
   const existing = await prisma.match.findUnique({
     where: { id: matchId },
@@ -68,7 +69,14 @@ export async function POST(
   // Save score and mark as manual
   const match = await prisma.match.update({
     where: { id: matchId },
-    data: { homeScore, awayScore, status: "FINISHED", manualScore: true, scoreUpdatedAt: new Date() },
+    data: {
+      homeScore,
+      awayScore,
+      status: "FINISHED",
+      manualScore: true,
+      scoreUpdatedAt: new Date(),
+      ...(advancingTeamId !== undefined ? { advancingTeamId } : {}),
+    },
     include: {
       homeTeam: { select: { name: true, code: true } },
       awayTeam: { select: { name: true, code: true } },

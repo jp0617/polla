@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
 import { z } from "zod";
-import { isPredictionLocked } from "@/lib/scoring/engine";
+import { isPredictionLocked, isKnockoutStage } from "@/lib/scoring/engine";
 
 const predictionSchema = z.object({
   matchId: z.string(),
   homeScore: z.number().int().min(0).max(30),
   awayScore: z.number().int().min(0).max(30),
+  advancingTeamId: z.string().nullable().optional(),
 });
 
 export async function POST(req: Request) {
@@ -26,7 +27,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { matchId, homeScore, awayScore } = parsed.data;
+  const { matchId, homeScore, awayScore, advancingTeamId } = parsed.data;
 
   const match = await prisma.match.findUnique({ where: { id: matchId } });
   if (!match) {
@@ -50,6 +51,16 @@ export async function POST(req: Request) {
     );
   }
 
+  const isDraw = homeScore === awayScore;
+  const isKO = isKnockoutStage(match.stage);
+
+  if (isKO && isDraw && !advancingTeamId) {
+    return NextResponse.json(
+      { error: "En fase eliminatoria debes escoger qué equipo avanza cuando predices empate" },
+      { status: 400 }
+    );
+  }
+
   const now = new Date();
   const prediction = await prisma.prediction.upsert({
     where: { userId_matchId: { userId: session.user.id, matchId } },
@@ -58,9 +69,15 @@ export async function POST(req: Request) {
       matchId,
       homeScore,
       awayScore,
+      advancingTeamId: isKO && isDraw ? (advancingTeamId ?? null) : null,
       userUpdatedAt: now,
     },
-    update: { homeScore, awayScore, userUpdatedAt: now },
+    update: {
+      homeScore,
+      awayScore,
+      advancingTeamId: isKO && isDraw ? (advancingTeamId ?? null) : null,
+      userUpdatedAt: now,
+    },
   });
 
   return NextResponse.json({ prediction });
