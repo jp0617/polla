@@ -101,14 +101,15 @@ export default function AdminPage() {
 
   const STAGES = [
     { value: "GROUP_STAGE", label: "Fase de Grupos" },
-    { value: "ROUND_OF_16", label: "Octavos de Final" },
+    {value: "LAST_16", label: "Octavos de Final"},
+    { value: "LAST_32", label: "Deciseisavos de Final" },
     { value: "QUARTER_FINALS", label: "Cuartos de Final" },
     { value: "SEMI_FINALS", label: "Semifinales" },
     { value: "THIRD_PLACE", label: "Tercer Puesto" },
     { value: "FINAL", label: "Gran Final" },
   ];
   const [newMatch, setNewMatch] = useState({
-    homeTeamId: "", awayTeamId: "", kickoff: "", stage: "ROUND_OF_16", group: "",
+    homeTeamId: "", awayTeamId: "", kickoff: "", stage: "LAST_32", group: "",
   });
   const [creatingMatch, setCreatingMatch] = useState(false);
   const [createMatchResult, setCreateMatchResult] = useState<string | null>(null);
