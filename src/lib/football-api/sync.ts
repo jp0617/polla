@@ -10,11 +10,12 @@ import { scoreMatchPredictions } from "@/lib/scoring/scoreMatchPredictions";
 import { notifyMatchResult } from "@/lib/whatsapp/notifyMatchResult";
 import { isKnockoutStage } from "@/lib/scoring/engine";
 
-export async function syncMatches(): Promise<{
+export async function syncMatches(options: { sendWhatsapp?: boolean } = {}): Promise<{
   updated: number;
   scored: number;
   bonuses: number;
 }> {
+  const { sendWhatsapp = true } = options;
   const [apiMatches, scoringConfig] = await Promise.all([
     getCompetitionMatches(),
     getScoringConfig(),
@@ -67,10 +68,46 @@ export async function syncMatches(): Promise<{
     ]);
 
     // Upsert match — never overwrite a manually set score
-    const existingMatch = await prisma.match.findUnique({
+    let existingMatch = await prisma.match.findUnique({
       where: { apiMatchId: apiMatch.id },
       select: { id: true, manualScore: true },
     });
+
+    // If not found by real apiMatchId, check for a manually-created placeholder
+    // (negative apiMatchId) with the same teams — link it to the real API match
+    if (!existingMatch) {
+      const manual = await prisma.match.findFirst({
+        where: {
+          apiMatchId: { lt: 0 },
+          homeTeamId: homeTeam.id,
+          awayTeamId: awayTeam.id,
+        },
+        select: { id: true, manualScore: true },
+      });
+      if (manual) {
+        await prisma.match.update({
+          where: { id: manual.id },
+          data: { apiMatchId: apiMatch.id },
+        });
+        existingMatch = manual;
+      }
+    }
+
+    const updatePayload = existingMatch?.manualScore
+      ? { stage }
+      : {
+          status,
+          homeScore: apiMatch.score.fullTime.home ?? undefined,
+          awayScore: apiMatch.score.fullTime.away ?? undefined,
+          homeScoreET: apiMatch.score.extraTime?.home ?? null,
+          awayScoreET: apiMatch.score.extraTime?.away ?? null,
+          stage,
+          kickoff: new Date(apiMatch.utcDate),
+          ...(apiMatch.score.fullTime.home !== null ? { scoreUpdatedAt: new Date() } : {}),
+          ...(isKnockoutStage(stage) && apiMatch.score.winner && apiMatch.score.winner !== "DRAW"
+            ? { advancingTeamId: apiMatch.score.winner === "HOME_TEAM" ? homeTeam.id : awayTeam.id }
+            : {}),
+        };
 
     const match = await prisma.match.upsert({
       where: { apiMatchId: apiMatch.id },
@@ -85,20 +122,7 @@ export async function syncMatches(): Promise<{
         homeScore: apiMatch.score.fullTime.home ?? undefined,
         awayScore: apiMatch.score.fullTime.away ?? undefined,
       },
-      update: existingMatch?.manualScore
-        ? { stage }
-        : {
-            status,
-            homeScore: apiMatch.score.fullTime.home ?? undefined,
-            awayScore: apiMatch.score.fullTime.away ?? undefined,
-            homeScoreET: apiMatch.score.extraTime?.home ?? null,
-            awayScoreET: apiMatch.score.extraTime?.away ?? null,
-            stage,
-            ...(apiMatch.score.fullTime.home !== null ? { scoreUpdatedAt: new Date() } : {}),
-            ...(isKnockoutStage(stage) && apiMatch.score.winner && apiMatch.score.winner !== "DRAW"
-              ? { advancingTeamId: apiMatch.score.winner === "HOME_TEAM" ? homeTeam.id : awayTeam.id }
-              : {}),
-          },
+      update: updatePayload,
     });
 
     updatedCount++;
@@ -147,7 +171,7 @@ export async function syncMatches(): Promise<{
     });
   }
 
-  if (scoredCount > 0) {
+  if (scoredCount > 0 && sendWhatsapp) {
     await notifyMatchResult();
   }
 

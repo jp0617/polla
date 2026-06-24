@@ -94,6 +94,25 @@ export default function AdminPage() {
   const [waPolling, setWaPolling] = useState(false);
   const [sendingResults, setSendingResults] = useState(false);
   const [sendResult, setSendResult] = useState<{ sent: number; failed: number } | null>(null);
+
+  const [syncing, setSyncing] = useState(false);
+  const [syncWhatsapp, setSyncWhatsapp] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+
+  const STAGES = [
+    { value: "GROUP_STAGE", label: "Fase de Grupos" },
+    { value: "ROUND_OF_16", label: "Octavos de Final" },
+    { value: "QUARTER_FINALS", label: "Cuartos de Final" },
+    { value: "SEMI_FINALS", label: "Semifinales" },
+    { value: "THIRD_PLACE", label: "Tercer Puesto" },
+    { value: "FINAL", label: "Gran Final" },
+  ];
+  const [newMatch, setNewMatch] = useState({
+    homeTeamId: "", awayTeamId: "", kickoff: "", stage: "ROUND_OF_16", group: "",
+  });
+  const [creatingMatch, setCreatingMatch] = useState(false);
+  const [createMatchResult, setCreateMatchResult] = useState<string | null>(null);
+
   const waIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -156,6 +175,67 @@ export default function AdminPage() {
       waIntervalRef.current = null;
     }
     setWaPolling(false);
+  }
+
+  async function createMatch() {
+    if (!newMatch.homeTeamId || !newMatch.awayTeamId || !newMatch.kickoff) return;
+    setCreatingMatch(true);
+    setCreateMatchResult(null);
+    const res = await fetch("/api/admin/matches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        homeTeamId: newMatch.homeTeamId,
+        awayTeamId: newMatch.awayTeamId,
+        kickoff: new Date(newMatch.kickoff).toISOString(),
+        stage: newMatch.stage,
+        group: newMatch.group || null,
+      }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setCreateMatchResult(`✓ Partido creado: ${data.match.homeTeam.code} vs ${data.match.awayTeam.code}`);
+      setMatches((prev) => [...prev, data.match].sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime()));
+      setScoreInputs((s) => ({ ...s, [data.match.id]: { home: "", away: "" } }));
+      setAdvancingInputs((s) => ({ ...s, [data.match.id]: null }));
+      setNewMatch({ homeTeamId: "", awayTeamId: "", kickoff: "", stage: "ROUND_OF_16", group: "" });
+    } else {
+      setCreateMatchResult(`Error: ${data.error}`);
+    }
+    setCreatingMatch(false);
+  }
+
+  async function runSync() {
+    setSyncing(true);
+    setSyncResult(null);
+    const res = await fetch("/api/admin/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sendWhatsapp: syncWhatsapp }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setSyncResult(
+        `✓ ${data.updated} partidos actualizados · ${data.scored} pronósticos puntuados · ${data.bonuses} bonus` +
+        (syncWhatsapp ? "" : " · Sin WhatsApp")
+      );
+      // Reload matches after sync
+      fetch("/api/admin/matches").then((r) => r.json()).then((d) => {
+        const ms = d.matches ?? [];
+        setMatches(ms);
+        const inputs: Record<string, { home: string; away: string }> = {};
+        const advInputs: Record<string, string | null> = {};
+        for (const m of ms) {
+          inputs[m.id] = { home: m.homeScore !== null ? String(m.homeScore) : "", away: m.awayScore !== null ? String(m.awayScore) : "" };
+          advInputs[m.id] = m.advancingTeamId ?? null;
+        }
+        setScoreInputs(inputs);
+        setAdvancingInputs(advInputs);
+      });
+    } else {
+      setSyncResult(`Error: ${data.error}`);
+    }
+    setSyncing(false);
   }
 
   async function sendDailyResults() {
@@ -306,6 +386,91 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-8">
+      {/* Crear partido manual */}
+      <div>
+        <h2 className="text-xl font-bold text-white">Crear partido</h2>
+        <p className="text-slate-400 text-sm mt-1 mb-4">
+          Para cuando la API aún no tiene los equipos de la siguiente fase.
+        </p>
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-400 font-medium">Local</label>
+              <select
+                value={newMatch.homeTeamId}
+                onChange={(e) => setNewMatch((s) => ({ ...s, homeTeamId: e.target.value }))}
+                className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500"
+              >
+                <option value="">— Selecciona equipo —</option>
+                {[...teams].sort((a, b) => a.name.localeCompare(b.name)).map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-400 font-medium">Visitante</label>
+              <select
+                value={newMatch.awayTeamId}
+                onChange={(e) => setNewMatch((s) => ({ ...s, awayTeamId: e.target.value }))}
+                className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500"
+              >
+                <option value="">— Selecciona equipo —</option>
+                {[...teams].sort((a, b) => a.name.localeCompare(b.name)).map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-400 font-medium">Fase</label>
+              <select
+                value={newMatch.stage}
+                onChange={(e) => setNewMatch((s) => ({ ...s, stage: e.target.value }))}
+                className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500"
+              >
+                {STAGES.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-400 font-medium">Fecha y hora (hora local)</label>
+              <input
+                type="datetime-local"
+                value={newMatch.kickoff}
+                onChange={(e) => setNewMatch((s) => ({ ...s, kickoff: e.target.value }))}
+                className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500"
+              />
+            </div>
+            {newMatch.stage === "GROUP_STAGE" && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-slate-400 font-medium">Grupo (opcional)</label>
+                <input
+                  type="text"
+                  placeholder="Ej: A"
+                  value={newMatch.group}
+                  onChange={(e) => setNewMatch((s) => ({ ...s, group: e.target.value.toUpperCase() }))}
+                  className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500"
+                />
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={createMatch}
+              disabled={creatingMatch || !newMatch.homeTeamId || !newMatch.awayTeamId || !newMatch.kickoff}
+              className="bg-green-700 hover:bg-green-600 disabled:bg-slate-700 disabled:text-slate-500 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              {creatingMatch ? "Creando..." : "Crear partido"}
+            </button>
+            {createMatchResult && (
+              <p className={`text-sm ${createMatchResult.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>
+                {createMatchResult}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Marcadores manuales */}
       <div>
         <h2 className="text-xl font-bold text-white">Marcadores</h2>
@@ -494,6 +659,39 @@ export default function AdminPage() {
             </>
           );
         })()}
+      </div>
+
+      {/* Sync manual */}
+      <div>
+        <h2 className="text-xl font-bold text-white">Sincronización manual</h2>
+        <p className="text-slate-400 text-sm mt-1 mb-4">
+          Fuerza una sincronización con la API de fútbol ahora mismo.
+        </p>
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 flex flex-col gap-4">
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <div
+              onClick={() => setSyncWhatsapp((v) => !v)}
+              className={`relative w-10 h-6 rounded-full transition-colors ${syncWhatsapp ? "bg-green-600" : "bg-slate-600"}`}
+            >
+              <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${syncWhatsapp ? "translate-x-4" : ""}`} />
+            </div>
+            <span className="text-sm text-slate-300">Enviar WhatsApp con resultados</span>
+          </label>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={runSync}
+              disabled={syncing}
+              className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900 disabled:text-blue-400 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              {syncing ? "Sincronizando..." : "Sincronizar ahora"}
+            </button>
+            {syncResult && (
+              <p className={`text-sm ${syncResult.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>
+                {syncResult}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* WhatsApp */}

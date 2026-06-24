@@ -41,7 +41,7 @@ services:
     schedule: "0/35 * * * *"
     buildCommand: echo "skip"
     startCommand: >
-      curl -sf -H "Authorization: Bearer $CRON_SECRET" $APP_URL/api/cron/sync
+      curl -sf -H "Authorization: Bearer $CRON_SECRET" https://$APP_URL/api/cron/sync
     envVars:
       - key: CRON_SECRET
         fromService:
@@ -60,7 +60,7 @@ services:
     schedule: "* * * * *"
     buildCommand: echo "skip"
     startCommand: >
-      curl -sf -H "Authorization: Bearer $CRON_SECRET" $APP_URL/api/cron/reminders
+      curl -sf -H "Authorization: Bearer $CRON_SECRET" https://$APP_URL/api/cron/reminders
     envVars:
       - key: CRON_SECRET
         fromService:
@@ -79,7 +79,7 @@ services:
     schedule: "* * * * *"
     buildCommand: echo "skip"
     startCommand: >
-      curl -sf -H "Authorization: Bearer $CRON_SECRET" $APP_URL/api/cron/sync-live
+      curl -sf -H "Authorization: Bearer $CRON_SECRET" https://$APP_URL/api/cron/sync-live
     envVars:
       - key: CRON_SECRET
         fromService:
