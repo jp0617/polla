@@ -53,10 +53,10 @@ export default async function DashboardPage() {
 
   const primaryMembership = user?.memberships[0] ?? null;
   const bonusPoints = user?.memberships.reduce((s, m) => s + m.bonusPoints, 0) ?? 0;
-  const displayPoints = (user?.totalPoints ?? 0) + (user?.manualPoints ?? 0) + bonusPoints;
-
-  // Rank within primary group using same logic as standings table
+  // Rank within primary group — recalculate from predictions (same as standings table)
   let userRank = 1;
+  let displayPoints = (user?.totalPoints ?? 0) + (user?.manualPoints ?? 0) + bonusPoints;
+
   if (primaryMembership) {
     const firstMembership = await prisma.membership.findFirst({
       where: { userId: session.user.id },
@@ -70,21 +70,24 @@ export default async function DashboardPage() {
           bonusPoints: true,
           user: {
             select: {
-              id: true, name: true, totalPoints: true, manualPoints: true,
+              id: true, name: true, manualPoints: true,
               predictions: { where: { status: "SCORED" }, select: { points: true } },
             },
           },
         },
       });
-      const sorted = groupMembers
-        .map((m) => ({
+      const mapped = groupMembers.map((m) => {
+        const predPoints = m.user.predictions.reduce((s, p) => s + (p.points ?? 0), 0);
+        return {
           userId: m.user.id,
+          total: predPoints + m.user.manualPoints + m.bonusPoints,
+          exactScores: m.user.predictions.filter((p) => (p.points ?? 0) >= 5).length,
           name: m.user.name,
-          total: m.user.totalPoints + m.user.manualPoints + m.bonusPoints,
-          exactScores: m.user.predictions.filter((p) => p.points !== null && p.points >= 5).length,
-        }))
-        .sort((a, b) => b.total - a.total || b.exactScores - a.exactScores || a.name.localeCompare(b.name));
+        };
+      });
+      const sorted = mapped.sort((a, b) => b.total - a.total || b.exactScores - a.exactScores || a.name.localeCompare(b.name));
       userRank = sorted.findIndex((m) => m.userId === session.user.id) + 1 || 1;
+      displayPoints = mapped.find((m) => m.userId === session.user.id)?.total ?? displayPoints;
     }
   }
 
