@@ -23,16 +23,11 @@ export async function notifyMatchResult(): Promise<number> {
               totalPoints: true,
               manualPoints: true,
               predictions: {
-                where: {
-                  status: "SCORED",
-                  match: {
-                    kickoff: {
-                      gte: startOfDay(new Date()),
-                      lte: endOfDay(new Date()),
-                    },
-                  },
+                where: { status: "SCORED" },
+                select: {
+                  points: true,
+                  match: { select: { kickoff: true } },
                 },
-                select: { points: true },
               },
             },
           },
@@ -47,22 +42,31 @@ export async function notifyMatchResult(): Promise<number> {
     if (!code.adminId) continue;
     if (!getConnectionStatus(code.adminId)) continue;
 
+    const todayStart = startOfDay(new Date());
+    const todayEnd = endOfDay(new Date());
+
     const ranked = code.memberships
       .map((m) => ({
         userId: m.user.id,
         name: m.user.name,
         total: m.user.totalPoints + m.user.manualPoints + m.bonusPoints,
+        exactScores: m.user.predictions.filter((p) => (p.points ?? 0) >= 5).length,
       }))
-      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+      .sort((a, b) => b.total - a.total || b.exactScores - a.exactScores || a.name.localeCompare(b.name));
     const rankMap = new Map(ranked.map((r, idx) => [r.userId, idx + 1]));
 
     const results = code.memberships.map((m) => {
       const total = m.user.totalPoints + m.user.manualPoints + m.bonusPoints;
-      const pointsToday = m.user.predictions.reduce((s, p) => s + (p.points ?? 0), 0);
+      const todayPreds = m.user.predictions.filter((p) => {
+        const k = new Date(p.match.kickoff);
+        return k >= todayStart && k <= todayEnd;
+      });
+      const pointsToday = todayPreds.reduce((s, p) => s + (p.points ?? 0), 0);
+      const exactScores = todayPreds.filter((p) => (p.points ?? 0) >= 5).length;
       return {
         phone: m.user.phone,
         name: m.user.name,
-        exactScores: m.user.predictions.filter((p) => p.points === 5).length,
+        exactScores,
         pointsToday,
         totalPoints: total,
         rank: rankMap.get(m.user.id) ?? 0,
