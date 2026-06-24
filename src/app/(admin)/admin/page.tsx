@@ -51,7 +51,7 @@ export default function AdminPage() {
   const [scoring, setScoring] = useState<ScoringConfig>({
     exactScore: 5, correctWinner: 3, correctDraw: 2, bonusPhaseAdvance: 2,
     exactScoreKO: 10, correctWinnerKO: 6, correctAdvancingKO: 4, bonusPhaseAdvanceKO: 4,
-    championBonus: 10, lockMinutes: 5, championTeamId: null, championBonusGiven: false,
+    championBonus: 10, lockMinutes: 1, championTeamId: null, championBonusGiven: false,
   });
   const [championTeamId, setChampionTeamId] = useState("");
   const [awardingChampion, setAwardingChampion] = useState(false);
@@ -128,7 +128,7 @@ export default function AdminPage() {
       for (const u of usersData.users ?? []) initial[u.id] = String(u.manualPoints);
       setEditing(initial);
       if (scoringData.config) {
-        setScoring({ exactScore: 5, correctWinner: 3, correctDraw: 2, bonusPhaseAdvance: 2, championBonus: 10, lockMinutes: 5, championTeamId: null, championBonusGiven: false, ...scoringData.config });
+        setScoring({ exactScore: 5, correctWinner: 3, correctDraw: 2, bonusPhaseAdvance: 2, championBonus: 10, lockMinutes: 1, championTeamId: null, championBonusGiven: false, ...scoringData.config });
         setChampionTeamId(scoringData.config.championTeamId ?? "");
       }
       setCodes(codesData.codes ?? []);

@@ -151,7 +151,7 @@ model ScoringConfig {
   correctAdvancingKO  Int      @default(4)
   bonusPhaseAdvanceKO Int      @default(4)
   championBonus      Int      @default(10)
-  lockMinutes        Int      @default(5)
+  lockMinutes        Int      @default(1)
   championTeamId     String?
   championBonusGiven Boolean  @default(false)
   updatedAt          DateTime @updatedAt
