@@ -199,8 +199,8 @@ function MatchPredictionCard({
   saving: boolean;
   onSave: (home: number, away: number, advancingTeamId?: string | null) => void;
 }) {
-  const [home, setHome] = useState(match.userPrediction?.homeScore ?? 0);
-  const [away, setAway] = useState(match.userPrediction?.awayScore ?? 0);
+  const [home, setHome] = useState<number | null>(match.userPrediction?.homeScore ?? null);
+  const [away, setAway] = useState<number | null>(match.userPrediction?.awayScore ?? null);
   const [advancingTeamId, setAdvancingTeamId] = useState<string | null>(
     match.userPrediction?.advancingTeamId ?? null
   );
@@ -208,7 +208,7 @@ function MatchPredictionCard({
   const isLive = match.status === "IN_PLAY" || match.status === "PAUSED";
   const canPredict = !match.isLocked && !isFinished && !isLive;
   const isKO = KO_STAGES.has(match.stage);
-  const isDraw = home === away;
+  const isDraw = home !== null && away !== null && home === away;
   const needsAdvancing = isKO && isDraw && canPredict;
 
   const points = match.userPrediction?.points;
@@ -253,8 +253,8 @@ function MatchPredictionCard({
               <span className="text-slate-500 font-bold">—</span>
               <ScoreInput value={away} onChange={(v) => { setAway(v); if (home !== v) setAdvancingTeamId(null); }} />
               <button
-                onClick={() => onSave(home, away, needsAdvancing ? advancingTeamId : null)}
-                disabled={saving || (needsAdvancing && !advancingTeamId)}
+                onClick={() => { if (home !== null && away !== null) onSave(home, away, needsAdvancing ? advancingTeamId : null); }}
+                disabled={saving || home === null || away === null || (needsAdvancing && !advancingTeamId)}
                 className="ml-2 bg-green-600 hover:bg-green-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm px-4 py-1.5 rounded-lg transition-colors"
               >
                 {saving ? "..." : match.userPrediction ? "Actualizar" : "Guardar"}
@@ -320,14 +320,17 @@ function MatchPredictionCard({
   );
 }
 
-function ScoreInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+function ScoreInput({ value, onChange }: Readonly<{ value: number | null; onChange: (v: number | null) => void }>) {
   return (
     <input
       type="number"
-      min={0}
-      max={30}
-      value={value}
-      onChange={(e) => onChange(Math.max(0, parseInt(e.target.value) || 0))}
+      value={value ?? ""}
+      placeholder="–"
+      onChange={(e) => {
+        if (e.target.value === "") { onChange(null); return; }
+        const n = Number.parseInt(e.target.value);
+        onChange(Number.isNaN(n) ? null : Math.max(0, n));
+      }}
       className="w-14 bg-slate-900 border border-slate-600 text-white text-center rounded-lg py-1.5 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-green-500"
     />
   );
