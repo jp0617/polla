@@ -148,8 +148,9 @@ model ScoringConfig {
   bonusPhaseAdvance  Int      @default(2)
   exactScoreKO        Int      @default(10)
   correctWinnerKO     Int      @default(6)
-  correctAdvancingKO  Int      @default(4)
-  bonusPhaseAdvanceKO Int      @default(4)
+  correctAdvancingKO   Int      @default(4)
+  advancingPickBonusKO Int      @default(1)
+  bonusPhaseAdvanceKO  Int      @default(4)
   championBonus      Int      @default(10)
   lockMinutes        Int      @default(1)
   championTeamId     String?

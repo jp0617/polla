@@ -117,6 +117,7 @@ export async function GET(req: NextRequest) {
         exactScoreKO: true,
         correctWinnerKO: true,
         correctAdvancingKO: true,
+        advancingPickBonusKO: true,
         bonusPhaseAdvanceKO: true,
       },
     }),
@@ -130,7 +131,8 @@ export async function GET(req: NextRequest) {
     bonusPhaseAdvance: groupCode?.bonusPhaseAdvance ?? globalConfig?.bonusPhaseAdvance ?? 2,
     exactScoreKO: globalConfig?.exactScoreKO ?? 10,
     correctWinnerKO: globalConfig?.correctWinnerKO ?? 6,
-    correctAdvancingKO: globalConfig?.correctAdvancingKO ?? 2,
+    correctAdvancingKO: globalConfig?.correctAdvancingKO ?? 4,
+    advancingPickBonusKO: globalConfig?.advancingPickBonusKO ?? 1,
     bonusPhaseAdvanceKO: globalConfig?.bonusPhaseAdvanceKO ?? 4,
   };
 

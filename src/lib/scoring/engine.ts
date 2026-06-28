@@ -8,6 +8,7 @@ export interface ScoringPoints {
   exactScoreKO: number;
   correctWinnerKO: number;
   correctAdvancingKO: number;
+  advancingPickBonusKO: number;
   bonusPhaseAdvanceKO: number;
 }
 
@@ -19,10 +20,11 @@ export const DEFAULT_POINTS: ScoringPoints = {
   exactScoreKO: 10,
   correctWinnerKO: 6,
   correctAdvancingKO: 4,
+  advancingPickBonusKO: 1,
   bonusPhaseAdvanceKO: 4,
 };
 
-const KO_STAGES = new Set(["ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
+const KO_STAGES = new Set(["LAST_32", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
 
 export function isKnockoutStage(stage: string): boolean {
   return KO_STAGES.has(stage);
@@ -53,12 +55,12 @@ export function scoreMatch(
 }
 
 /**
- * Knockout scoring — three distinct cases:
- * 1. Predicted non-draw, exact 90-min score → exactScoreKO
- * 2. Predicted non-draw, correct advancing team (90 or 120 min) → correctWinnerKO
- * 3. Predicted draw + correct advancing team:
- *    - Also exact score → exactScoreKO + correctAdvancingKO
- *    - Only advancing team correct → correctAdvancingKO
+ * Knockout scoring:
+ * - Predicted draw + result is draw → correctAdvancingKO (4) always
+ *   + advancingPickBonusKO (1) if correct advancing team
+ *   + exactScoreKO (10) if exact score at 90 or 120 min
+ * - Predicted non-draw + exact 90-min score → exactScoreKO (10)
+ * - Predicted non-draw + correct advancing team (90 or 120 min) → correctWinnerKO (6)
  */
 export function scoreMatchKO(
   predicted: { home: number; away: number; advancingTeamId: string | null },
@@ -79,14 +81,17 @@ export function scoreMatchKO(
   const predictedDraw = predicted.home === predicted.away;
 
   if (predictedDraw) {
+    // 4 pts for correct draw, regardless of advancing team pick
+    let pts = points.correctAdvancingKO;
+    // +1 if they also picked the correct advancing team
     const correctAdvancing = predicted.advancingTeamId === actual.advancingTeamId;
-    if (!correctAdvancing) return { points: 0, breakdown: { exactScore: false, correctWinner: false, bonusTeam: false } };
-    const pts = exactScore ? points.exactScoreKO + points.correctAdvancingKO : points.correctAdvancingKO;
-    return { points: pts, breakdown: { exactScore, correctWinner: false, bonusTeam: false } };
+    if (correctAdvancing) pts += points.advancingPickBonusKO;
+    // +10 if exact score at 90 or 120 min
+    if (exactScore) pts += points.exactScoreKO;
+    return { points: pts, breakdown: { exactScore, correctWinner: false, bonusTeam: correctAdvancing } };
   }
 
-  // Non-draw prediction: the user predicted one side to win.
-  // "Correct winner" = the team they predicted to win actually advanced (covers 90min + ET/pens).
+  // Non-draw prediction: correct if the team they predicted to win actually advanced.
   const predictedSide = predicted.home > predicted.away ? "HOME" : "AWAY";
   const actualAdvancingSide = actual.advancingTeamId === actual.homeTeamId ? "HOME" : "AWAY";
   const correctWinner = !exactScore && predictedSide === actualAdvancingSide;

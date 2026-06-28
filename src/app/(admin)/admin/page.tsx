@@ -10,6 +10,7 @@ interface ScoringConfig {
   exactScoreKO: number;
   correctWinnerKO: number;
   correctAdvancingKO: number;
+  advancingPickBonusKO: number;
   bonusPhaseAdvanceKO: number;
   championBonus: number;
   lockMinutes: number;
@@ -50,7 +51,7 @@ export default function AdminPage() {
 
   const [scoring, setScoring] = useState<ScoringConfig>({
     exactScore: 5, correctWinner: 3, correctDraw: 2, bonusPhaseAdvance: 2,
-    exactScoreKO: 10, correctWinnerKO: 6, correctAdvancingKO: 4, bonusPhaseAdvanceKO: 4,
+    exactScoreKO: 10, correctWinnerKO: 6, correctAdvancingKO: 4, advancingPickBonusKO: 1, bonusPhaseAdvanceKO: 4,
     championBonus: 10, lockMinutes: 1, championTeamId: null, championBonusGiven: false,
   });
   const [championTeamId, setChampionTeamId] = useState("");
@@ -533,7 +534,7 @@ export default function AdminPage() {
                     const busy = scoringMatch[m.id] ?? false;
                     const result = scoreResult[m.id];
                     const finished = m.status === "FINISHED";
-                    const KO_STAGES = new Set(["ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
+                    const KO_STAGES = new Set(["LAST_32", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
                     const isKO = KO_STAGES.has(m.stage);
                     const homeVal = parseInt(input.home, 10);
                     const awayVal = parseInt(input.away, 10);
@@ -800,7 +801,8 @@ export default function AdminPage() {
                 [
                   { key: "exactScoreKO" as const, label: "Marcador exacto" },
                   { key: "correctWinnerKO" as const, label: "Ganador correcto" },
-                  { key: "correctAdvancingKO" as const, label: "Empate + avanza correcto" },
+                  { key: "correctAdvancingKO" as const, label: "Empate correcto" },
+                  { key: "advancingPickBonusKO" as const, label: "Bonus equipo que avanza (empate)" },
                   { key: "bonusPhaseAdvanceKO" as const, label: "Bonus fase" },
                 ] as { key: keyof ScoringConfig & string; label: string }[]
               ).map(({ key, label }) => (
@@ -1140,7 +1142,7 @@ function ScoringField({
         <input
           type="number"
           min={0}
-          value={value}
+          value={value ?? 0}
           onChange={(e) => onChange(parseInt(e.target.value) || 0)}
           className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500"
         />

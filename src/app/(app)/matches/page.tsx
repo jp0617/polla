@@ -21,7 +21,7 @@ interface Prediction {
   userUpdatedAt: string | null;
 }
 
-const KO_STAGES = new Set(["ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
+const KO_STAGES = new Set(["LAST_32", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
 
 interface Match {
   id: string;
@@ -41,6 +41,18 @@ interface Match {
   userPrediction: Prediction | null;
 }
 
+interface ScoringConfig {
+  exactScore: number;
+  correctWinner: number;
+  correctDraw: number;
+  bonusPhaseAdvance: number;
+  exactScoreKO: number;
+  correctWinnerKO: number;
+  correctAdvancingKO: number;
+  advancingPickBonusKO: number;
+  bonusPhaseAdvanceKO: number;
+}
+
 export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +60,17 @@ export default function MatchesPage() {
   const [tabFilter, setTabFilter] = useState<"today" | "finished" | "upcoming">("today");
   const [saving, setSaving] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [scoring, setScoring] = useState<ScoringConfig>({
+    exactScore: 5, correctWinner: 3, correctDraw: 2, bonusPhaseAdvance: 2,
+    exactScoreKO: 10, correctWinnerKO: 6, correctAdvancingKO: 4, advancingPickBonusKO: 1, bonusPhaseAdvanceKO: 4,
+  });
+
+  useEffect(() => {
+    fetch("/api/scoring-config")
+      .then((r) => r.json())
+      .then((d) => { if (d.config) setScoring((s) => ({ ...s, ...d.config })); })
+      .catch(() => {});
+  }, []);
 
   const loadMatches = useCallback(async () => {
     const params = new URLSearchParams();
@@ -98,7 +121,11 @@ export default function MatchesPage() {
     return m.status !== "FINISHED" && day !== todayKey;
   });
 
-  const stages = [...new Set(tabFiltered.map((m) => m.stage))];
+  // Stages from ALL matches so the dropdown shows every phase regardless of active tab
+  const STAGE_ORDER = ["GROUP_STAGE", "LAST_32", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"];
+  const allStages = [...new Set(matches.map((m) => m.stage))].sort(
+    (a, b) => STAGE_ORDER.indexOf(a) - STAGE_ORDER.indexOf(b)
+  );
 
   // Group by Colombia date
   const byDate = tabFiltered.reduce<Record<string, Match[]>>((acc, m) => {
@@ -144,7 +171,7 @@ export default function MatchesPage() {
           className="ml-auto bg-slate-800 border border-slate-600 text-slate-200 rounded-lg px-3 py-1.5 text-sm"
         >
           <option value="">Todas las fases</option>
-          {stages.map((s) => (
+          {allStages.map((s) => (
             <option key={s} value={s}>
               {formatStage(s)}
             </option>
@@ -153,15 +180,39 @@ export default function MatchesPage() {
       </div>
 
       {/* Scoring legend */}
-      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
-        <h3 className="text-sm font-semibold text-slate-300 mb-2">Sistema de puntos</h3>
-        <div className="flex flex-wrap gap-3 text-xs text-slate-400">
-          <span className="flex items-center gap-1"><span className="text-yellow-400 font-bold">+5</span> Marcador exacto</span>
-          <span className="flex items-center gap-1"><span className="text-green-400 font-bold">+3</span> Ganador correcto</span>
-          <span className="flex items-center gap-1"><span className="text-blue-400 font-bold">+2</span> Empate correcto</span>
-          <span className="flex items-center gap-1"><span className="text-purple-400 font-bold">+2</span> Equipo fav. avanza</span>
-        </div>
-      </div>
+      {(() => {
+        const viewingKO = stageFilter ? KO_STAGES.has(stageFilter) : false;
+        const showBoth = !stageFilter;
+        return (
+          <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 space-y-3">
+            {(!viewingKO || showBoth) && (
+              <div>
+                {showBoth && <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Fase de grupos</p>}
+                {!showBoth && <h3 className="text-sm font-semibold text-slate-300 mb-2">Sistema de puntos</h3>}
+                <div className="flex flex-wrap gap-3 text-xs text-slate-400">
+                  <span className="flex items-center gap-1"><span className="text-yellow-400 font-bold">+{scoring.exactScore}</span> Marcador exacto</span>
+                  <span className="flex items-center gap-1"><span className="text-green-400 font-bold">+{scoring.correctWinner}</span> Ganador correcto</span>
+                  <span className="flex items-center gap-1"><span className="text-blue-400 font-bold">+{scoring.correctDraw}</span> Empate correcto</span>
+                  <span className="flex items-center gap-1"><span className="text-purple-400 font-bold">+{scoring.bonusPhaseAdvance}</span> Equipo fav. avanza</span>
+                </div>
+              </div>
+            )}
+            {(viewingKO || showBoth) && (
+              <div>
+                {showBoth && <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Fase eliminatoria</p>}
+                {!showBoth && <h3 className="text-sm font-semibold text-slate-300 mb-2">Sistema de puntos</h3>}
+                <div className="flex flex-wrap gap-3 text-xs text-slate-400">
+                  <span className="flex items-center gap-1"><span className="text-yellow-400 font-bold">+{scoring.exactScoreKO}</span> Marcador exacto (90/120 min)</span>
+                  <span className="flex items-center gap-1"><span className="text-green-400 font-bold">+{scoring.correctWinnerKO}</span> Ganador correcto</span>
+                  <span className="flex items-center gap-1"><span className="text-blue-400 font-bold">+{scoring.correctAdvancingKO}</span> Empate correcto</span>
+                  <span className="flex items-center gap-1"><span className="text-indigo-400 font-bold">+{scoring.advancingPickBonusKO}</span> Bonus equipo que avanza</span>
+                  <span className="flex items-center gap-1"><span className="text-purple-400 font-bold">+{scoring.bonusPhaseAdvance}</span> Equipo fav. avanza</span>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {loading ? (
         <div className="text-center text-slate-400 py-12">Cargando partidos...</div>
@@ -377,6 +428,7 @@ function StatusBadge({ status, isLocked, minute, kickoff }: { status: string; is
 function formatStage(stage: string): string {
   const map: Record<string, string> = {
     GROUP_STAGE: "Fase de Grupos",
+    LAST_32: "Dieciseisavos de Final",
     ROUND_OF_16: "Octavos de Final",
     QUARTER_FINALS: "Cuartos de Final",
     SEMI_FINALS: "Semifinales",
