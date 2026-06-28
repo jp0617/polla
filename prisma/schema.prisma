@@ -138,6 +138,8 @@ model PhaseAdvance {
   toStage    String
   detectedAt DateTime @default(now())
   bonusGiven Boolean  @default(false)
+
+  @@unique([teamId, toStage])
 }
 
 model ScoringConfig {

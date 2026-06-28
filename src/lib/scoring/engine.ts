@@ -81,13 +81,12 @@ export function scoreMatchKO(
   const predictedDraw = predicted.home === predicted.away;
 
   if (predictedDraw) {
-    // 4 pts for correct draw, regardless of advancing team pick
-    let pts = points.correctAdvancingKO;
-    // +1 if they also picked the correct advancing team
     const correctAdvancing = predicted.advancingTeamId === actual.advancingTeamId;
-    if (correctAdvancing) pts += points.advancingPickBonusKO;
-    // +10 if exact score at 90 or 120 min
-    if (exactScore) pts += points.exactScoreKO;
+    const advancingBonus = correctAdvancing ? points.advancingPickBonusKO : 0;
+    // Exact score replaces the draw bonus (it's already implied); non-exact draw gives correctAdvancingKO
+    const pts = exactScore
+      ? points.exactScoreKO + advancingBonus
+      : points.correctAdvancingKO + advancingBonus;
     return { points: pts, breakdown: { exactScore, correctWinner: false, bonusTeam: correctAdvancing } };
   }
 

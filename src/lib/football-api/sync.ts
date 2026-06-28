@@ -188,20 +188,19 @@ async function detectPhaseAdvancesForMatch(
 
   for (const team of [homeTeam, awayTeam]) {
     if (stageOrder[currentStage] > stageOrder[team.currentStage]) {
-      const existingAdvance = await prisma.phaseAdvance.findFirst({
-        where: { teamId: team.id, toStage: currentStage, bonusGiven: true },
-      });
-
-      if (!existingAdvance) {
-        const advance = await prisma.phaseAdvance.create({
-          data: {
-            teamId: team.id,
-            fromStage: team.currentStage,
-            toStage: currentStage,
-          },
+      // Try to create the advance record atomically. The unique constraint on
+      // (teamId, toStage) guarantees only one record is created even under concurrent syncs.
+      let created = false;
+      try {
+        await prisma.phaseAdvance.create({
+          data: { teamId: team.id, fromStage: team.currentStage, toStage: currentStage, bonusGiven: true },
         });
+        created = true;
+      } catch {
+        // Unique constraint violation — another sync already created this record. Skip.
+      }
 
-        // Award bonus to all memberships that have this team as favorite
+      if (created) {
         const favMemberships = await prisma.membership.findMany({
           where: { favoriteTeamId: team.id },
           select: { id: true },
@@ -214,11 +213,6 @@ async function detectPhaseAdvancesForMatch(
           });
           bonusCount++;
         }
-
-        await prisma.phaseAdvance.update({
-          where: { id: advance.id },
-          data: { bonusGiven: true },
-        });
 
         await prisma.team.update({
           where: { id: team.id },

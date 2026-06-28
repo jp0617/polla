@@ -21,11 +21,32 @@ interface Group {
   label: string | null;
 }
 
+interface ScoringConfig {
+  exactScore: number;
+  correctWinner: number;
+  correctDraw: number;
+  exactScoreKO: number;
+  correctWinnerKO: number;
+  correctAdvancingKO: number;
+  advancingPickBonusKO: number;
+}
+
 export default function StandingsPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [scoring, setScoring] = useState<ScoringConfig>({
+    exactScore: 5, correctWinner: 3, correctDraw: 2,
+    exactScoreKO: 10, correctWinnerKO: 6, correctAdvancingKO: 4, advancingPickBonusKO: 1,
+  });
+
+  useEffect(() => {
+    fetch("/api/scoring-config")
+      .then((r) => r.json())
+      .then((d) => { if (d.config) setScoring((s) => ({ ...s, ...d.config })); })
+      .catch(() => {});
+  }, []);
 
   // Load user's groups from profile
   useEffect(() => {
@@ -129,8 +150,16 @@ export default function StandingsPage() {
             ))}
           </div>
 
-          <div className="text-xs text-slate-500 text-center">
-            ⭐ exacto (+5) · ✓ ganador (+3) · = empate (+2) · 🎁 bonus equipo/campeón
+          <div className="text-xs text-slate-500 text-center space-y-1">
+            <div>
+              <span className="text-slate-400 font-medium">Grupos:</span>{" "}
+              ⭐ exacto (+{scoring.exactScore}) · ✓ ganador (+{scoring.correctWinner}) · = empate (+{scoring.correctDraw})
+            </div>
+            <div>
+              <span className="text-slate-400 font-medium">Eliminatoria:</span>{" "}
+              ⭐ exacto (+{scoring.exactScoreKO}) · ✓ ganador (+{scoring.correctWinnerKO}) · = empate (+{scoring.correctAdvancingKO}) · avanza (+{scoring.advancingPickBonusKO})
+            </div>
+            <div>🎁 bonus equipo favorito / campeón</div>
           </div>
         </>
       )}
