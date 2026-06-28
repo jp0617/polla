@@ -46,6 +46,7 @@ export default function PredictionsPage() {
   const [loading, setLoading] = useState(false);
   const [loadingMembers, setLoadingMembers] = useState(true);
   const [tabFilter, setTabFilter] = useState<"today" | "finished" | "upcoming">("today");
+  const [stageFilter, setStageFilter] = useState("");
 
   useEffect(() => {
     fetch("/api/predictions/user")
@@ -69,8 +70,14 @@ export default function PredictionsPage() {
 
   const todayKey = fmtDateKey(new Date().toISOString());
 
+  const STAGE_ORDER = ["GROUP_STAGE", "LAST_32", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"];
+  const allStages = [...new Set(predictions.map((p) => p.match.stage))].sort(
+    (a, b) => STAGE_ORDER.indexOf(a) - STAGE_ORDER.indexOf(b)
+  );
+
   const filtered = predictions.filter((p) => {
     const day = fmtDateKey(p.match.kickoff);
+    if (stageFilter && p.match.stage !== stageFilter) return false;
     if (tabFilter === "finished") return p.match.status === "FINISHED";
     if (tabFilter === "today") return day === todayKey;
     return p.match.status !== "FINISHED" && day !== todayKey;
@@ -107,14 +114,14 @@ export default function PredictionsPage() {
 
       {selectedId && (
         <>
-          {/* Tab filters */}
-          <div className="flex gap-2">
+          {/* Tab + stage filters */}
+          <div className="flex gap-2 flex-wrap">
             {(["today", "upcoming", "finished"] as const).map((f) => {
               const label = f === "today" ? "Hoy" : f === "upcoming" ? "Próximos" : "Finalizados";
               return (
                 <button
                   key={f}
-                  onClick={() => setTabFilter(f)}
+                  onClick={() => { setTabFilter(f); setStageFilter(""); }}
                   className={`text-sm px-4 py-1.5 rounded-full transition-colors ${
                     tabFilter === f ? "bg-green-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
                   }`}
@@ -123,6 +130,18 @@ export default function PredictionsPage() {
                 </button>
               );
             })}
+            {allStages.length > 1 && (
+              <select
+                value={stageFilter}
+                onChange={(e) => setStageFilter(e.target.value)}
+                className="ml-auto bg-slate-800 border border-slate-600 text-slate-200 rounded-lg px-3 py-1.5 text-sm"
+              >
+                <option value="">Todas las fases</option>
+                {allStages.map((s) => (
+                  <option key={s} value={s}>{formatStage(s)}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Stats */}
@@ -229,8 +248,8 @@ function TeamMini({ team, align = "left" }: { team: { shortName: string; crest: 
 
 function formatStage(stage: string): string {
   const map: Record<string, string> = {
-    GROUP_STAGE: "Grupos", ROUND_OF_16: "Octavos", QUARTER_FINALS: "Cuartos",
-    SEMI_FINALS: "Semis", FINAL: "Final",
+    GROUP_STAGE: "Grupos", LAST_32: "Dieciseisavos", ROUND_OF_16: "Octavos",
+    QUARTER_FINALS: "Cuartos", SEMI_FINALS: "Semis", THIRD_PLACE: "3er puesto", FINAL: "Final",
   };
   return map[stage] ?? stage;
 }

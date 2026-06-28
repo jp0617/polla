@@ -39,6 +39,7 @@ export default function HistoryPage() {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "exact" | "draw" | "winner" | "miss">("all");
+  const [stageFilter, setStageFilter] = useState("");
 
   useEffect(() => {
     fetch("/api/predictions")
@@ -56,7 +57,13 @@ export default function HistoryPage() {
   const winnerCount = predictions.filter((p) => getPredType(p) === "winner").length;
   const missCount = predictions.filter((p) => getPredType(p) === "miss").length;
 
+  const STAGE_ORDER = ["GROUP_STAGE", "LAST_32", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"];
+  const allStages = [...new Set(predictions.map((p) => p.match.stage))].sort(
+    (a, b) => STAGE_ORDER.indexOf(a) - STAGE_ORDER.indexOf(b)
+  );
+
   const filtered = predictions.filter((p) => {
+    if (stageFilter && p.match.stage !== stageFilter) return false;
     if (filter === "all") return true;
     return getPredType(p) === filter;
   });
@@ -74,7 +81,7 @@ export default function HistoryPage() {
         <StatBox label="Fallados" value={missCount} color="text-red-400" bg="bg-red-900/40" />
       </div>
 
-      {/* Filter */}
+      {/* Filters */}
       <div className="flex gap-2 flex-wrap">
         {(["all", "exact", "draw", "winner", "miss"] as const).map((f) => (
           <button
@@ -89,6 +96,18 @@ export default function HistoryPage() {
             {f === "all" ? "Todos" : f === "exact" ? "Exactos" : f === "draw" ? "Empate" : f === "winner" ? "Ganador" : "Fallados"}
           </button>
         ))}
+        {allStages.length > 1 && (
+          <select
+            value={stageFilter}
+            onChange={(e) => setStageFilter(e.target.value)}
+            className="ml-auto bg-slate-800 border border-slate-600 text-slate-200 rounded-lg px-3 py-1.5 text-sm"
+          >
+            <option value="">Todas las fases</option>
+            {allStages.map((s) => (
+              <option key={s} value={s}>{formatStage(s)}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {loading ? (
@@ -220,9 +239,11 @@ function TeamMini({
 function formatStage(stage: string): string {
   const map: Record<string, string> = {
     GROUP_STAGE: "Grupos",
+    LAST_32: "Dieciseisavos",
     ROUND_OF_16: "Octavos",
     QUARTER_FINALS: "Cuartos",
     SEMI_FINALS: "Semis",
+    THIRD_PLACE: "3er puesto",
     FINAL: "Final",
   };
   return map[stage] ?? stage;
