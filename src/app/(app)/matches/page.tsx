@@ -262,6 +262,11 @@ function MatchPredictionCard({
   const isDraw = home !== null && away !== null && home === away;
   const needsAdvancing = isKO && isDraw && canPredict;
 
+  // Reset advancing team when scores are no longer a draw
+  useEffect(() => {
+    if (!isDraw) setAdvancingTeamId(null);
+  }, [isDraw]);
+
   const points = match.userPrediction?.points;
 
   return (
@@ -300,9 +305,9 @@ function MatchPredictionCard({
           <div className="mt-4 space-y-3">
             <div className="flex items-center gap-2 justify-center">
               <span className="text-xs text-slate-400">Tu pronóstico:</span>
-              <ScoreInput value={home} onChange={(v) => { setHome(v); if (v !== away) setAdvancingTeamId(null); }} />
+              <ScoreInput value={home} onChange={setHome} />
               <span className="text-slate-500 font-bold">—</span>
-              <ScoreInput value={away} onChange={(v) => { setAway(v); if (home !== v) setAdvancingTeamId(null); }} />
+              <ScoreInput value={away} onChange={setAway} />
               <button
                 onClick={() => { if (home !== null && away !== null) onSave(home, away, needsAdvancing ? advancingTeamId : null); }}
                 disabled={saving || home === null || away === null || (needsAdvancing && !advancingTeamId)}
