@@ -27,15 +27,22 @@ interface Prediction {
   };
 }
 
+const KO_STAGES = new Set(["LAST_32", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
+
 function getPredType(pred: Prediction): "exact" | "draw" | "winner" | "miss" | "pending" {
   if (pred.status !== "SCORED") return "pending";
   const { match } = pred;
   if (match.homeScore === null || match.awayScore === null) return "pending";
-  if (pred.homeScore === match.homeScore && pred.awayScore === match.awayScore) return "exact";
+  const pts = pred.points ?? 0;
+  const isExact = pred.homeScore === match.homeScore && pred.awayScore === match.awayScore;
+  if (isExact) return "exact";
+  if (KO_STAGES.has(match.stage)) {
+    return pts > 0 ? "winner" : "miss";
+  }
   if (match.homeScore === match.awayScore && pred.homeScore === pred.awayScore) return "draw";
   const mw = match.homeScore > match.awayScore ? "home" : match.awayScore > match.homeScore ? "away" : "draw";
   const pw = pred.homeScore > pred.awayScore ? "home" : pred.awayScore > pred.homeScore ? "away" : "draw";
-  if (mw === pw && (pred.points ?? 0) > 0) return "winner";
+  if (mw === pw && pts > 0) return "winner";
   return "miss";
 }
 

@@ -92,12 +92,22 @@ export function scoreMatchKO(
   const exactScore = exactScore90 || exactScoreET;
   const predictedDraw = predicted.home === predicted.away;
 
+  // Was the match actually a draw at the end of regulation/extra time (i.e. decided on
+  // penalties)? Use the 120-min score when available, otherwise the 90-min score.
+  const wasActualDraw =
+    actual.homeScoreET !== null && actual.awayScoreET !== null
+      ? actual.homeScoreET === actual.awayScoreET
+      : isActualDraw;
+
   if (predictedDraw) {
     const correctAdvancing = predicted.advancingTeamId === inferredAdvancingTeamId;
     const advancingBonus = correctAdvancing ? points.advancingPickBonusKO : 0;
+    // correctAdvancingKO only if the match was actually a draw (went to penalties)
     const pts = exactScore
       ? points.exactScoreKO + advancingBonus
-      : points.correctAdvancingKO + advancingBonus;
+      : wasActualDraw
+        ? points.correctAdvancingKO + advancingBonus
+        : advancingBonus;
     return { points: pts, breakdown: { exactScore, correctWinner: false, bonusTeam: correctAdvancing } };
   }
 
@@ -105,13 +115,6 @@ export function scoreMatchKO(
   const predictedSide = predicted.home > predicted.away ? "HOME" : "AWAY";
   const actualAdvancingSide = inferredAdvancingTeamId === actual.homeTeamId ? "HOME" : "AWAY";
   const correctWinner = !exactScore && predictedSide === actualAdvancingSide;
-
-  // Was the match actually a draw at the end of regulation/extra time (i.e. decided on
-  // penalties)? Use the 120-min score when available, otherwise the 90-min score.
-  const wasActualDraw =
-    actual.homeScoreET !== null && actual.awayScoreET !== null
-      ? actual.homeScoreET === actual.awayScoreET
-      : isActualDraw;
 
   let pts = 0;
   if (exactScore) pts = points.exactScoreKO;
