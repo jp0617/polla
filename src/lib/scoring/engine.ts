@@ -60,7 +60,11 @@ export function scoreMatch(
  *   + advancingPickBonusKO (1) if correct advancing team
  *   + exactScoreKO (10) if exact score at 90 or 120 min
  * - Predicted non-draw + exact 90-min score → exactScoreKO (10)
- * - Predicted non-draw + correct advancing team (90 or 120 min) → correctWinnerKO (6)
+ * - Predicted non-draw + correct advancing team, and the match was NOT
+ *   actually a draw (won outright in regular/extra time) → correctWinnerKO (6)
+ * - Predicted non-draw + correct advancing team, but the match WAS a draw
+ *   at the end of regulation/extra time (decided on penalties) → only
+ *   advancingPickBonusKO (1), since the predicted result itself was wrong
  */
 export function scoreMatchKO(
   predicted: { home: number; away: number; advancingTeamId: string | null },
@@ -102,9 +106,16 @@ export function scoreMatchKO(
   const actualAdvancingSide = inferredAdvancingTeamId === actual.homeTeamId ? "HOME" : "AWAY";
   const correctWinner = !exactScore && predictedSide === actualAdvancingSide;
 
+  // Was the match actually a draw at the end of regulation/extra time (i.e. decided on
+  // penalties)? Use the 120-min score when available, otherwise the 90-min score.
+  const wasActualDraw =
+    actual.homeScoreET !== null && actual.awayScoreET !== null
+      ? actual.homeScoreET === actual.awayScoreET
+      : isActualDraw;
+
   let pts = 0;
   if (exactScore) pts = points.exactScoreKO;
-  else if (correctWinner) pts = points.correctWinnerKO;
+  else if (correctWinner) pts = wasActualDraw ? points.advancingPickBonusKO : points.correctWinnerKO;
 
   return { points: pts, breakdown: { exactScore, correctWinner, bonusTeam: false } };
 }
