@@ -3,12 +3,12 @@ import {
   getCompetitionMatches,
   mapApiStatus,
   mapApiStage,
-  stageOrder,
 } from "./client";
 import { getScoringConfig } from "@/lib/scoring/config";
 import { scoreMatchPredictions } from "@/lib/scoring/scoreMatchPredictions";
 import { notifyMatchResult } from "@/lib/whatsapp/notifyMatchResult";
 import { isKnockoutStage } from "@/lib/scoring/engine";
+import { detectPhaseAdvancesForMatch } from "@/lib/scoring/detectPhaseAdvances";
 
 export async function syncMatches(options: { sendWhatsapp?: boolean } = {}): Promise<{
   updated: number;
@@ -145,12 +145,7 @@ export async function syncMatches(options: { sendWhatsapp?: boolean } = {}): Pro
     }
 
     // Detect phase advances and award bonus points
-    const bonuses = await detectPhaseAdvancesForMatch(
-      homeTeam,
-      awayTeam,
-      stage,
-      scoringConfig.bonusPhaseAdvance
-    );
+    const bonuses = await detectPhaseAdvancesForMatch(homeTeam, awayTeam, stage);
     bonusCount += bonuses;
   }
 
@@ -176,51 +171,4 @@ export async function syncMatches(options: { sendWhatsapp?: boolean } = {}): Pro
   }
 
   return { updated: updatedCount, scored: scoredCount, bonuses: bonusCount };
-}
-
-async function detectPhaseAdvancesForMatch(
-  homeTeam: { id: string; currentStage: string; apiId: number },
-  awayTeam: { id: string; currentStage: string; apiId: number },
-  currentStage: string,
-  bonusPoints: number
-): Promise<number> {
-  let bonusCount = 0;
-
-  for (const team of [homeTeam, awayTeam]) {
-    if (stageOrder[currentStage] > stageOrder[team.currentStage]) {
-      // Try to create the advance record atomically. The unique constraint on
-      // (teamId, toStage) guarantees only one record is created even under concurrent syncs.
-      let created = false;
-      try {
-        await prisma.phaseAdvance.create({
-          data: { teamId: team.id, fromStage: team.currentStage, toStage: currentStage, bonusGiven: true },
-        });
-        created = true;
-      } catch {
-        // Unique constraint violation — another sync already created this record. Skip.
-      }
-
-      if (created) {
-        const favMemberships = await prisma.membership.findMany({
-          where: { favoriteTeamId: team.id },
-          select: { id: true },
-        });
-
-        for (const m of favMemberships) {
-          await prisma.membership.update({
-            where: { id: m.id },
-            data: { bonusPoints: { increment: bonusPoints } },
-          });
-          bonusCount++;
-        }
-
-        await prisma.team.update({
-          where: { id: team.id },
-          data: { currentStage },
-        });
-      }
-    }
-  }
-
-  return bonusCount;
 }

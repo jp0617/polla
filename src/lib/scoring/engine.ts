@@ -67,7 +67,15 @@ export function scoreMatchKO(
   actual: { home: number; away: number; homeScoreET: number | null; awayScoreET: number | null; advancingTeamId: string | null; homeTeamId: string; awayTeamId: string },
   points: ScoringPoints = DEFAULT_POINTS
 ): ScoringResult {
-  if (!actual.advancingTeamId) {
+  // For non-draw results, infer the advancing team from the score if not explicitly set
+  const isActualDraw = actual.home === actual.away;
+  const inferredAdvancingTeamId = actual.advancingTeamId
+    ?? (!isActualDraw
+      ? actual.home > actual.away ? actual.homeTeamId : actual.awayTeamId
+      : null);
+
+  if (!inferredAdvancingTeamId) {
+    // Draw result with no advancing team set yet — can't score
     return { points: 0, breakdown: { exactScore: false, correctWinner: false, bonusTeam: false } };
   }
 
@@ -81,9 +89,8 @@ export function scoreMatchKO(
   const predictedDraw = predicted.home === predicted.away;
 
   if (predictedDraw) {
-    const correctAdvancing = predicted.advancingTeamId === actual.advancingTeamId;
+    const correctAdvancing = predicted.advancingTeamId === inferredAdvancingTeamId;
     const advancingBonus = correctAdvancing ? points.advancingPickBonusKO : 0;
-    // Exact score replaces the draw bonus (it's already implied); non-exact draw gives correctAdvancingKO
     const pts = exactScore
       ? points.exactScoreKO + advancingBonus
       : points.correctAdvancingKO + advancingBonus;
@@ -92,7 +99,7 @@ export function scoreMatchKO(
 
   // Non-draw prediction: correct if the team they predicted to win actually advanced.
   const predictedSide = predicted.home > predicted.away ? "HOME" : "AWAY";
-  const actualAdvancingSide = actual.advancingTeamId === actual.homeTeamId ? "HOME" : "AWAY";
+  const actualAdvancingSide = inferredAdvancingTeamId === actual.homeTeamId ? "HOME" : "AWAY";
   const correctWinner = !exactScore && predictedSide === actualAdvancingSide;
 
   let pts = 0;

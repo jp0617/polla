@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
 import { z } from "zod";
 import { scoreMatchPredictions } from "@/lib/scoring/scoreMatchPredictions";
+import { detectPhaseAdvancesForMatch } from "@/lib/scoring/detectPhaseAdvances";
+import { isKnockoutStage } from "@/lib/scoring/engine";
 import { notifyMatchResult } from "@/lib/whatsapp/notifyMatchResult";
 
 const schema = z.object({
@@ -34,7 +36,14 @@ export async function POST(
 
   const existing = await prisma.match.findUnique({
     where: { id: matchId },
-    select: { status: true },
+    select: {
+      status: true,
+      stage: true,
+      homeTeamId: true,
+      awayTeamId: true,
+      homeTeam: { select: { currentStage: true } },
+      awayTeam: { select: { currentStage: true } },
+    },
   });
 
   if (existing?.status === "FINISHED" && !force) {
@@ -66,6 +75,18 @@ export async function POST(
     }
   }
 
+  // For KO non-draw results, auto-infer advancingTeamId if not provided
+  let resolvedAdvancingTeamId = advancingTeamId;
+  if (
+    existing &&
+    isKnockoutStage(existing.stage) &&
+    resolvedAdvancingTeamId === undefined &&
+    homeScore !== awayScore
+  ) {
+    resolvedAdvancingTeamId =
+      homeScore > awayScore ? existing.homeTeamId : existing.awayTeamId;
+  }
+
   // Save score and mark as manual
   const match = await prisma.match.update({
     where: { id: matchId },
@@ -75,7 +96,7 @@ export async function POST(
       status: "FINISHED",
       manualScore: true,
       scoreUpdatedAt: new Date(),
-      ...(advancingTeamId !== undefined ? { advancingTeamId } : {}),
+      ...(resolvedAdvancingTeamId !== undefined ? { advancingTeamId: resolvedAdvancingTeamId } : {}),
     },
     include: {
       homeTeam: { select: { name: true, code: true } },
@@ -85,6 +106,16 @@ export async function POST(
 
   // Score all predictions with the new/corrected result
   const scored = await scoreMatchPredictions(matchId, homeScore, awayScore);
+
+  // Detect phase advances and award bonus points (only for new scores, not corrections)
+  let bonuses = 0;
+  if (!force && existing) {
+    bonuses = await detectPhaseAdvancesForMatch(
+      { id: existing.homeTeamId, currentStage: existing.homeTeam!.currentStage },
+      { id: existing.awayTeamId, currentStage: existing.awayTeam!.currentStage },
+      existing.stage
+    );
+  }
 
   // Don't send WhatsApp when correcting an already-finished match
   const codesNotified = force ? 0 : await notifyMatchResult();
@@ -99,6 +130,7 @@ export async function POST(
       awayScore,
     },
     scored,
+    bonuses,
     whatsapp: { codesNotified },
   });
 }

@@ -8,6 +8,10 @@ import { startOfDay, endOfDay } from "date-fns";
  * Returns the number of groups notified.
  */
 export async function notifyMatchResult(): Promise<number> {
+  const now = new Date();
+  const todayStart = startOfDay(now);
+  const todayEnd = endOfDay(now);
+
   const codesWithAdmin = await prisma.invitationCode.findMany({
     where: { adminId: { not: null } },
     select: {
@@ -20,12 +24,12 @@ export async function notifyMatchResult(): Promise<number> {
               id: true,
               name: true,
               phone: true,
-              totalPoints: true,
               manualPoints: true,
               predictions: {
                 where: { status: "SCORED" },
                 select: {
                   points: true,
+                  wppSentAt: true,
                   match: { select: { kickoff: true } },
                 },
               },
@@ -42,26 +46,29 @@ export async function notifyMatchResult(): Promise<number> {
     if (!code.adminId) continue;
     if (!getConnectionStatus(code.adminId)) continue;
 
-    const todayStart = startOfDay(new Date());
-    const todayEnd = endOfDay(new Date());
-
     const ranked = code.memberships
-      .map((m) => ({
-        userId: m.user.id,
-        name: m.user.name,
-        total: m.user.totalPoints + m.user.manualPoints + m.bonusPoints,
-        exactScores: m.user.predictions.filter((p) => (p.points ?? 0) >= 5).length,
-      }))
+      .map((m) => {
+        const predPts = m.user.predictions.reduce((s, p) => s + (p.points ?? 0), 0);
+        return {
+          userId: m.user.id,
+          name: m.user.name,
+          total: predPts + m.user.manualPoints + m.bonusPoints,
+          exactScores: m.user.predictions.filter((p) => (p.points ?? 0) >= 5).length,
+        };
+      })
       .sort((a, b) => b.total - a.total || b.exactScores - a.exactScores || a.name.localeCompare(b.name));
     const rankMap = new Map(ranked.map((r, idx) => [r.userId, idx + 1]));
 
     const results = code.memberships.map((m) => {
-      const total = m.user.totalPoints + m.user.manualPoints + m.bonusPoints;
+      const predPts = m.user.predictions.reduce((s, p) => s + (p.points ?? 0), 0);
+      const total = predPts + m.user.manualPoints + m.bonusPoints;
       const todayPreds = m.user.predictions.filter((p) => {
         const k = new Date(p.match.kickoff);
         return k >= todayStart && k <= todayEnd;
       });
-      const pointsToday = todayPreds.reduce((s, p) => s + (p.points ?? 0), 0);
+      // Points from match predictions today (only newly sent ones)
+      const unsentToday = todayPreds.filter((p) => p.wppSentAt === null);
+      const pointsToday = unsentToday.reduce((s, p) => s + (p.points ?? 0), 0);
       const exactScores = todayPreds.filter((p) => (p.points ?? 0) >= 5).length;
       return {
         phone: m.user.phone,
@@ -77,7 +84,6 @@ export async function notifyMatchResult(): Promise<number> {
     codesNotified++;
 
     // Mark wppSentAt on predictions communicated for the first time
-    const now = new Date();
     for (const m of code.memberships) {
       const predIds = await prisma.prediction.findMany({
         where: {

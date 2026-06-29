@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
 import { z } from "zod";
+import { sendWhatsAppMessage, getConnectionStatus } from "@/lib/whatsapp/service";
 
 const schema = z.object({ teamId: z.string() });
 
@@ -43,7 +44,11 @@ export async function POST(req: Request): Promise<NextResponse> {
   // Award bonus to all memberships that picked this team as champion
   const winningMemberships = await prisma.membership.findMany({
     where: { championPickId: teamId },
-    select: { id: true },
+    select: {
+      id: true,
+      user: { select: { name: true, phone: true } },
+      invitationCode: { select: { adminId: true } },
+    },
   });
 
   for (const m of winningMemberships) {
@@ -57,6 +62,22 @@ export async function POST(req: Request): Promise<NextResponse> {
     where: { id: "singleton" },
     data: { championTeamId: teamId, championBonusGiven: true },
   });
+
+  // Send WA notification to each winner (fire-and-forget)
+  Promise.all(
+    winningMemberships.map(async (m) => {
+      const adminId = m.invitationCode.adminId;
+      if (!adminId || !getConnectionStatus(adminId) || !m.user.phone) return;
+      const message =
+        `🏆 ¡Felicidades ${m.user.name}! *${team.name}* es el CAMPEÓN del Mundial 2026.\n` +
+        `🎁 Bonus campeón: *+${config.championBonus} pts*`;
+      try {
+        await sendWhatsAppMessage(adminId, m.user.phone, message);
+      } catch (err) {
+        console.error(`[WA] Failed to send champion bonus to ${m.user.phone}:`, err);
+      }
+    })
+  ).catch((err) => console.error("[WA] champion notifications error:", err));
 
   return NextResponse.json({ ok: true, team: team.name, awarded: winningMemberships.length });
 }

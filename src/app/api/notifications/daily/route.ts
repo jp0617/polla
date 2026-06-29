@@ -75,6 +75,7 @@ export async function POST(req: Request) {
       name: m.user.name,
       exactScores,
       pointsToday: todayPoints,
+
       totalPoints: total,
       rank: rankMap.get(m.user.id) ?? 0,
     };

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
-import { scoreMatch } from "@/lib/scoring/engine";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -19,7 +18,6 @@ export async function GET(req: NextRequest) {
       select: {
         id: true,
         name: true,
-        totalPoints: true,
         manualPoints: true,
         memberships: { select: { bonusPoints: true } },
         predictions: { where: { status: "SCORED" }, select: { points: true } },
@@ -29,16 +27,17 @@ export async function GET(req: NextRequest) {
     const leaderboard = users
       .map((user, idx) => {
         const bonusPoints = user.memberships.reduce((s, m) => s + m.bonusPoints, 0);
-        const total = user.totalPoints + user.manualPoints + bonusPoints;
+        const predPoints = user.predictions.reduce((s, p) => s + (p.points ?? 0), 0);
+        const total = predPoints + user.manualPoints + bonusPoints;
         return {
           rank: idx + 1,
           userId: user.id,
           name: user.name,
           totalPoints: total,
           bonusPoints,
-          exactScores: user.predictions.filter((p) => p.points === 5).length,
-          correctWinners: user.predictions.filter((p) => p.points === 3).length,
-          correctDraws: user.predictions.filter((p) => p.points === 2).length,
+          exactScores: user.predictions.filter((p) => (p.points ?? 0) >= 5).length,
+          correctWinners: user.predictions.filter((p) => (p.points ?? 0) === 3 || (p.points ?? 0) === 6).length,
+          correctDraws: user.predictions.filter((p) => (p.points ?? 0) === 2 || (p.points ?? 0) === 4).length,
           favoriteTeam: null,
           isCurrentUser: user.id === userId,
         };
@@ -86,9 +85,10 @@ export async function GET(req: NextRequest) {
             predictions: {
               where: { status: "SCORED" },
               select: {
+                points: true,
                 homeScore: true,
                 awayScore: true,
-                match: { select: { homeScore: true, awayScore: true } },
+                match: { select: { homeScore: true, awayScore: true, stage: true } },
               },
             },
           },
@@ -145,15 +145,15 @@ export async function GET(req: NextRequest) {
 
       for (const p of m.user.predictions) {
         if (p.match.homeScore === null || p.match.awayScore === null) continue;
-        const result = scoreMatch(
-          { home: p.homeScore, away: p.awayScore },
-          { home: p.match.homeScore, away: p.match.awayScore },
-          pts
-        );
-        predictionPoints += result.points;
-        if (result.breakdown.exactScore) exactScores++;
-        else if (result.breakdown.correctWinner) correctWinners++;
-        else if (!result.breakdown.exactScore && !result.breakdown.correctWinner && result.points > 0) correctDraws++;
+        const stored = p.points ?? 0;
+        predictionPoints += stored;
+        // Determine breakdown category from score comparison
+        const isExact = p.homeScore === p.match.homeScore && p.awayScore === p.match.awayScore;
+        const matchWinner = p.match.homeScore > p.match.awayScore ? "H" : p.match.awayScore > p.match.homeScore ? "A" : "D";
+        const predWinner = p.homeScore > p.awayScore ? "H" : p.awayScore > p.homeScore ? "A" : "D";
+        if (isExact) exactScores++;
+        else if (stored > 0 && predWinner === matchWinner && matchWinner !== "D") correctWinners++;
+        else if (stored > 0 && predWinner === "D" && matchWinner === "D") correctDraws++;
       }
 
       const total = predictionPoints + m.user.manualPoints + m.bonusPoints;
