@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
 import { z } from "zod";
 import { isPredictionLocked, isKnockoutStage } from "@/lib/scoring/engine";
+import { getScoringConfig } from "@/lib/scoring/config";
 
 const predictionSchema = z.object({
   matchId: z.string(),
@@ -29,7 +30,10 @@ export async function POST(req: Request) {
 
   const { matchId, homeScore, awayScore, advancingTeamId } = parsed.data;
 
-  const match = await prisma.match.findUnique({ where: { id: matchId } });
+  const [match, scoringConfig] = await Promise.all([
+    prisma.match.findUnique({ where: { id: matchId } }),
+    getScoringConfig(),
+  ]);
   if (!match) {
     return NextResponse.json(
       { error: "Partido no encontrado" },
@@ -37,7 +41,7 @@ export async function POST(req: Request) {
     );
   }
 
-  if (isPredictionLocked(match.kickoff)) {
+  if (isPredictionLocked(match.kickoff, scoringConfig.lockMinutes ?? 1)) {
     return NextResponse.json(
       { error: "El pronóstico está cerrado para este partido" },
       { status: 403 }
