@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
+import { isKnockoutStage } from "@/lib/scoring/engine";
+
+function matchesPhase(stage: string, phase: string | null): boolean {
+  if (!phase || phase === "all") return true;
+  if (phase === "ko") return isKnockoutStage(stage);
+  if (phase === "groups") return !isKnockoutStage(stage);
+  return true;
+}
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -11,6 +19,7 @@ export async function GET(req: NextRequest) {
   const userId = session.user.id;
   const isAdmin = (session.user as { isAdmin?: boolean }).isAdmin;
   const groupId = req.nextUrl.searchParams.get("groupId");
+  const phase = req.nextUrl.searchParams.get("phase"); // "all" | "groups" | "ko"
 
   // Admin without groupId sees global leaderboard (uses global scoring)
   if (isAdmin && !groupId) {
@@ -73,10 +82,13 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const [memberships, groupCode, globalConfig] = await Promise.all([
+  const [memberships, groupCode, globalConfig, phaseAdvances] = await Promise.all([
     prisma.membership.findMany({
       where: { invitationCodeId: targetCodeId },
-      include: {
+      select: {
+        bonusPoints: true,
+        favoriteTeamId: true,
+        favoriteTeam: { select: { name: true, crest: true, code: true } },
         user: {
           select: {
             id: true,
@@ -93,7 +105,6 @@ export async function GET(req: NextRequest) {
             },
           },
         },
-        favoriteTeam: { select: { name: true, crest: true, code: true } },
       },
     }),
     prisma.invitationCode.findUnique({
@@ -121,6 +132,10 @@ export async function GET(req: NextRequest) {
         bonusPhaseAdvanceKO: true,
       },
     }),
+    prisma.phaseAdvance.findMany({
+      select: { teamId: true, fromStage: true, bonusGiven: true },
+      where: { bonusGiven: true },
+    }),
   ]);
 
   // Merge group overrides with global defaults
@@ -145,6 +160,7 @@ export async function GET(req: NextRequest) {
 
       for (const p of m.user.predictions) {
         if (p.match.homeScore === null || p.match.awayScore === null) continue;
+        if (!matchesPhase(p.match.stage, phase)) continue;
         const stored = p.points ?? 0;
         predictionPoints += stored;
         // Determine breakdown category from score comparison
@@ -156,7 +172,19 @@ export async function GET(req: NextRequest) {
         else if (stored > 0 && predWinner === "D" && matchWinner === "D") correctDraws++;
       }
 
-      const total = predictionPoints + m.user.manualPoints + m.bonusPoints;
+      // Split phase-advance bonuses by type based on PhaseAdvance records
+      let bonusPoints = m.bonusPoints;
+      if (phase && phase !== "all" && m.favoriteTeamId) {
+        const teamAdvances = phaseAdvances.filter((pa) => pa.teamId === m.favoriteTeamId);
+        const groupsBonus = teamAdvances
+          .filter((pa) => !isKnockoutStage(pa.fromStage))
+          .reduce((s) => s + pts.bonusPhaseAdvance, 0);
+        const koBonus = teamAdvances
+          .filter((pa) => isKnockoutStage(pa.fromStage))
+          .reduce((s) => s + pts.bonusPhaseAdvanceKO, 0);
+        bonusPoints = phase === "groups" ? groupsBonus : koBonus;
+      }
+      const total = predictionPoints + m.user.manualPoints + bonusPoints;
 
       return {
         rank: 0,
@@ -164,7 +192,7 @@ export async function GET(req: NextRequest) {
         name: m.user.name,
         totalPoints: total,
         predictionPoints,
-        bonusPoints: m.bonusPoints,
+        bonusPoints,
         exactScores,
         correctWinners,
         correctDraws,

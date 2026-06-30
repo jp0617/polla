@@ -102,12 +102,12 @@ export function scoreMatchKO(
   if (predictedDraw) {
     const correctAdvancing = predicted.advancingTeamId === inferredAdvancingTeamId;
     const advancingBonus = correctAdvancing ? points.advancingPickBonusKO : 0;
-    // correctAdvancingKO only if the match was actually a draw (went to penalties)
+    // correctAdvancingKO and advancing bonus only if the match actually went to penalties
     const pts = exactScore
       ? points.exactScoreKO + advancingBonus
       : wasActualDraw
         ? points.correctAdvancingKO + advancingBonus
-        : advancingBonus;
+        : 0;
     return { points: pts, breakdown: { exactScore, correctWinner: false, bonusTeam: correctAdvancing } };
   }
 

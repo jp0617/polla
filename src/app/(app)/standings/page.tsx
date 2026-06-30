@@ -35,6 +35,7 @@ export default function StandingsPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [phase, setPhase] = useState<"all" | "groups" | "ko">("all");
   const [loading, setLoading] = useState(true);
   const [scoring, setScoring] = useState<ScoringConfig>({
     exactScore: 5, correctWinner: 3, correctDraw: 2,
@@ -63,21 +64,39 @@ export default function StandingsPage() {
   useEffect(() => {
     if (selectedGroup === undefined) return;
     setLoading(true);
-    const url = selectedGroup
-      ? `/api/standings?groupId=${selectedGroup}`
-      : "/api/standings";
+    const params = new URLSearchParams();
+    if (selectedGroup) params.set("groupId", selectedGroup);
+    if (phase !== "all") params.set("phase", phase);
+    const url = `/api/standings${params.size ? `?${params}` : ""}`;
     fetch(url)
       .then((r) => r.json())
       .then((d) => {
         setLeaderboard(d.leaderboard ?? []);
         setLoading(false);
       });
-  }, [selectedGroup]);
+  }, [selectedGroup, phase]);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-white">Clasificación</h1>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex rounded-lg overflow-hidden border border-slate-600">
+            {(["all", "groups", "ko"] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPhase(p)}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                  phase === p
+                    ? "bg-green-600 text-white"
+                    : "bg-slate-800 text-slate-400 hover:text-white"
+                }`}
+              >
+                {p === "all" ? "Todo" : p === "groups" ? "Grupos" : "Eliminatoria"}
+              </button>
+            ))}
+          </div>
 
         {groups.length > 1 && (
           <select
@@ -92,6 +111,7 @@ export default function StandingsPage() {
             ))}
           </select>
         )}
+        </div>
       </div>
 
       {loading ? (
