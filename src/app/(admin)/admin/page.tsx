@@ -219,7 +219,7 @@ export default function AdminPage() {
     const res = await fetch("/api/admin/recalculate", { method: "POST" });
     const data = await res.json();
     if (res.ok) {
-      setRecalcResult(`✓ Puntos recalculados para ${data.updated} usuario(s)`);
+      setRecalcResult(`✓ ${data.rescored} pronósticos rescoreados en ${data.matches} partidos`);
       const usersData = await fetch("/api/admin/users").then((r) => r.json());
       setUsers(usersData.users ?? []);
       const initial: Record<string, string> = {};
