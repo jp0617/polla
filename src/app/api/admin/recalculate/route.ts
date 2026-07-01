@@ -16,21 +16,19 @@ export async function POST() {
   const users = await prisma.user.findMany({
     select: {
       id: true,
-      manualPoints: true,
-      memberships: { select: { bonusPoints: true } },
       predictions: { where: { status: "SCORED" }, select: { points: true } },
     },
   });
 
   let updated = 0;
   for (const user of users) {
+    // User.totalPoints in DB stores prediction points only.
+    // manualPoints and membership.bonusPoints are added on top by the API.
     const predPoints = user.predictions.reduce((s, p) => s + (p.points ?? 0), 0);
-    const bonusPoints = user.memberships.reduce((s, m) => s + m.bonusPoints, 0);
-    const correct = predPoints + user.manualPoints + bonusPoints;
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { totalPoints: correct },
+      data: { totalPoints: predPoints },
     });
     updated++;
   }
