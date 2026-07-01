@@ -103,6 +103,8 @@ export default function AdminPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncWhatsapp, setSyncWhatsapp] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [recalculating, setRecalculating] = useState(false);
+  const [recalcResult, setRecalcResult] = useState<string | null>(null);
 
   const STAGES = [
     { value: "GROUP_STAGE", label: "Fase de Grupos" },
@@ -209,6 +211,24 @@ export default function AdminPage() {
       setCreateMatchResult(`Error: ${data.error}`);
     }
     setCreatingMatch(false);
+  }
+
+  async function recalculatePoints() {
+    setRecalculating(true);
+    setRecalcResult(null);
+    const res = await fetch("/api/admin/recalculate", { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      setRecalcResult(`✓ Puntos recalculados para ${data.updated} usuario(s)`);
+      const usersData = await fetch("/api/admin/users").then((r) => r.json());
+      setUsers(usersData.users ?? []);
+      const initial: Record<string, string> = {};
+      for (const u of usersData.users ?? []) initial[u.id] = String(u.manualPoints);
+      setEditing(initial);
+    } else {
+      setRecalcResult(`Error: ${data.error}`);
+    }
+    setRecalculating(false);
   }
 
   async function runSync() {
@@ -704,7 +724,7 @@ export default function AdminPage() {
             </div>
             <span className="text-sm text-slate-300">Enviar WhatsApp con resultados</span>
           </label>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={runSync}
               disabled={syncing}
@@ -712,9 +732,21 @@ export default function AdminPage() {
             >
               {syncing ? "Sincronizando..." : "Sincronizar ahora"}
             </button>
+            <button
+              onClick={recalculatePoints}
+              disabled={recalculating}
+              className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              {recalculating ? "Recalculando..." : "Recalcular puntos"}
+            </button>
             {syncResult && (
               <p className={`text-sm ${syncResult.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>
                 {syncResult}
+              </p>
+            )}
+            {recalcResult && (
+              <p className={`text-sm ${recalcResult.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>
+                {recalcResult}
               </p>
             )}
           </div>
