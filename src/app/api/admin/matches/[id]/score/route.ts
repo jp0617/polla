@@ -80,7 +80,7 @@ export async function POST(
   if (
     existing &&
     isKnockoutStage(existing.stage) &&
-    resolvedAdvancingTeamId === undefined &&
+    (resolvedAdvancingTeamId == null) &&
     homeScore !== awayScore
   ) {
     resolvedAdvancingTeamId =
