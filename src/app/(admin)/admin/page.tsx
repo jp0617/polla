@@ -216,7 +216,7 @@ export default function AdminPage() {
   async function recalculatePoints() {
     setRecalculating(true);
     setRecalcResult(null);
-    const res = await fetch("/api/admin/sync-points", { method: "POST" });
+    const res = await fetch("/api/admin/recalculate", { method: "POST" });
     const data = await res.json();
     if (res.ok) {
       setRecalcResult(`✓ Puntos sincronizados para ${data.updated} usuario(s)`);
