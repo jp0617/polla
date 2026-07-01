@@ -216,10 +216,10 @@ export default function AdminPage() {
   async function recalculatePoints() {
     setRecalculating(true);
     setRecalcResult(null);
-    const res = await fetch("/api/admin/recalculate", { method: "POST" });
+    const res = await fetch("/api/admin/sync-points", { method: "POST" });
     const data = await res.json();
     if (res.ok) {
-      setRecalcResult(`✓ ${data.rescored} pronósticos rescoreados en ${data.matches} partidos`);
+      setRecalcResult(`✓ Puntos sincronizados para ${data.updated} usuario(s)`);
       const usersData = await fetch("/api/admin/users").then((r) => r.json());
       setUsers(usersData.users ?? []);
       const initial: Record<string, string> = {};
