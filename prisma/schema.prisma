@@ -92,8 +92,6 @@ model Match {
   status      MatchStatus  @default(SCHEDULED)
   homeScore   Int?
   awayScore   Int?
-  homeScoreET Int?
-  awayScoreET Int?
   minute      Int?
   advancingTeamId String?
   advancingTeam   Team?    @relation("MatchAdvancingTeam", fields: [advancingTeamId], references: [id])

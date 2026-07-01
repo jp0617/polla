@@ -15,7 +15,7 @@ export async function scoreMatchPredictions(
     getScoringConfig(),
     prisma.match.findUnique({
       where: { id: matchId },
-      select: { stage: true, advancingTeamId: true, homeTeamId: true, awayTeamId: true, homeScoreET: true, awayScoreET: true },
+      select: { stage: true, advancingTeamId: true, homeTeamId: true, awayTeamId: true },
     }),
   ]);
 
@@ -32,7 +32,7 @@ export async function scoreMatchPredictions(
     const result = isKO
       ? scoreMatchKO(
           { home: pred.homeScore, away: pred.awayScore, advancingTeamId: pred.advancingTeamId },
-          { home: homeScore, away: awayScore, homeScoreET: match.homeScoreET, awayScoreET: match.awayScoreET, advancingTeamId: match.advancingTeamId, homeTeamId: match.homeTeamId, awayTeamId: match.awayTeamId },
+          { home: homeScore, away: awayScore, advancingTeamId: match.advancingTeamId, homeTeamId: match.homeTeamId, awayTeamId: match.awayTeamId },
           scoringConfig
         )
       : scoreMatch(

@@ -68,13 +68,13 @@ export function scoreMatch(
  */
 export function scoreMatchKO(
   predicted: { home: number; away: number; advancingTeamId: string | null },
-  actual: { home: number; away: number; homeScoreET: number | null; awayScoreET: number | null; advancingTeamId: string | null; homeTeamId: string; awayTeamId: string },
+  actual: { home: number; away: number; advancingTeamId: string | null; homeTeamId: string; awayTeamId: string },
   points: ScoringPoints = DEFAULT_POINTS
 ): ScoringResult {
-  // For non-draw results, infer the advancing team from the score if not explicitly set
-  const isActualDraw = actual.home === actual.away;
+  // If scores are tied and advancingTeamId is set, the match was decided on penalties
+  const wasActualDraw = actual.home === actual.away;
   const inferredAdvancingTeamId = actual.advancingTeamId
-    ?? (!isActualDraw
+    ?? (!wasActualDraw
       ? actual.home > actual.away ? actual.homeTeamId : actual.awayTeamId
       : null);
 
@@ -83,21 +83,8 @@ export function scoreMatchKO(
     return { points: 0, breakdown: { exactScore: false, correctWinner: false, bonusTeam: false } };
   }
 
-  const exactScore90 = predicted.home === actual.home && predicted.away === actual.away;
-  const exactScoreET =
-    actual.homeScoreET !== null &&
-    actual.awayScoreET !== null &&
-    predicted.home === actual.homeScoreET &&
-    predicted.away === actual.awayScoreET;
-  const exactScore = exactScore90 || exactScoreET;
+  const exactScore = predicted.home === actual.home && predicted.away === actual.away;
   const predictedDraw = predicted.home === predicted.away;
-
-  // Was the match actually a draw at the end of regulation/extra time (i.e. decided on
-  // penalties)? Use the 120-min score when available, otherwise the 90-min score.
-  const wasActualDraw =
-    actual.homeScoreET !== null && actual.awayScoreET !== null
-      ? actual.homeScoreET === actual.awayScoreET
-      : isActualDraw;
 
   if (predictedDraw) {
     const correctAdvancing = predicted.advancingTeamId === inferredAdvancingTeamId;

@@ -99,8 +99,6 @@ export async function syncMatches(options: { sendWhatsapp?: boolean } = {}): Pro
           status,
           homeScore: apiMatch.score.fullTime.home ?? undefined,
           awayScore: apiMatch.score.fullTime.away ?? undefined,
-          homeScoreET: apiMatch.score.extraTime?.home ?? null,
-          awayScoreET: apiMatch.score.extraTime?.away ?? null,
           stage,
           kickoff: new Date(apiMatch.utcDate),
           ...(apiMatch.score.fullTime.home !== null ? { scoreUpdatedAt: new Date() } : {}),

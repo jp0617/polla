@@ -23,8 +23,6 @@ export async function POST() {
       stage: true,
       homeScore: true,
       awayScore: true,
-      homeScoreET: true,
-      awayScoreET: true,
       advancingTeamId: true,
       homeTeamId: true,
       awayTeamId: true,
@@ -45,9 +43,7 @@ export async function POST() {
     const isKO = isKnockoutStage(match.stage);
     const isActualDraw = match.homeScore === match.awayScore;
     const advancingTeamId = match.advancingTeamId
-      ?? (!isActualDraw
-        ? match.homeScore > match.awayScore ? match.homeTeamId : match.awayTeamId
-        : null);
+      ?? (!isActualDraw ? (match.homeScore! > match.awayScore! ? match.homeTeamId : match.awayTeamId) : null);
 
     const predictions = await prisma.prediction.findMany({
       where: { matchId: match.id, status: "LOCKED" },
@@ -61,8 +57,6 @@ export async function POST() {
             {
               home: match.homeScore,
               away: match.awayScore,
-              homeScoreET: match.homeScoreET,
-              awayScoreET: match.awayScoreET,
               advancingTeamId,
               homeTeamId: match.homeTeamId,
               awayTeamId: match.awayTeamId,
