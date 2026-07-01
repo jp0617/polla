@@ -25,9 +25,9 @@ export async function POST(req: NextRequest) {
   const teams = await prisma.team.findMany({
     where: {
       currentStage: stage,
-      favoriteMemberships: { some: {} },
+      memberFavorites: { some: {} },
     },
-    select: { id: true, name: true, _count: { select: { favoriteMemberships: true } } },
+    select: { id: true, name: true, _count: { select: { memberFavorites: true } } },
   });
 
   if (teams.length === 0) {
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   for (const team of teams) {
     try {
       await notifyPhaseAdvance(team.id, stage, bonusPoints);
-      sent += team._count.favoriteMemberships;
+      sent += team._count.memberFavorites;
     } catch (err) {
       console.error(`[WA] notify-phase error for team ${team.id}:`, err);
     }
