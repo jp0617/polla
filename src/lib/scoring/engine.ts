@@ -107,7 +107,7 @@ export function scoreMatchKO(
       ? points.exactScoreKO + advancingBonus
       : wasActualDraw
         ? points.correctAdvancingKO + advancingBonus
-        : 0;
+        : correctAdvancing ? points.advancingPickBonusKO : 0;
     return { points: pts, breakdown: { exactScore, correctWinner: false, bonusTeam: correctAdvancing } };
   }
 
