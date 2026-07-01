@@ -79,7 +79,8 @@ export function mapApiStage(apiStage: string): string {
   const map: Record<string, string> = {
     GROUP_STAGE: "GROUP_STAGE",
     LAST_32: "LAST_32",
-    ROUND_OF_16: "ROUND_OF_16",
+    LAST_16: "LAST_16",
+    ROUND_OF_16: "LAST_16",
     QUARTER_FINALS: "QUARTER_FINALS",
     SEMI_FINALS: "SEMI_FINALS",
     THIRD_PLACE: "THIRD_PLACE",
@@ -91,6 +92,7 @@ export function mapApiStage(apiStage: string): string {
 export const stageOrder: Record<string, number> = {
   GROUP_STAGE: 1,
   LAST_32: 2,
+  LAST_16: 3,
   ROUND_OF_16: 3,
   QUARTER_FINALS: 4,
   SEMI_FINALS: 5,

@@ -24,7 +24,7 @@ export const DEFAULT_POINTS: ScoringPoints = {
   bonusPhaseAdvanceKO: 4,
 };
 
-const KO_STAGES = new Set(["LAST_32", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
+const KO_STAGES = new Set(["LAST_32", "LAST_16", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
 
 export function isKnockoutStage(stage: string): boolean {
   return KO_STAGES.has(stage);

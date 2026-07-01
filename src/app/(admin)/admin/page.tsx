@@ -96,6 +96,10 @@ export default function AdminPage() {
   const [sendingResults, setSendingResults] = useState(false);
   const [sendResult, setSendResult] = useState<{ sent: number; failed: number } | null>(null);
 
+  const [notifyPhaseStage, setNotifyPhaseStage] = useState("LAST_16");
+  const [sendingPhaseNotify, setSendingPhaseNotify] = useState(false);
+  const [phaseNotifyResult, setPhaseNotifyResult] = useState<string | null>(null);
+
   const [syncing, setSyncing] = useState(false);
   const [syncWhatsapp, setSyncWhatsapp] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
@@ -238,6 +242,27 @@ export default function AdminPage() {
       setSyncResult(`Error: ${data.error}`);
     }
     setSyncing(false);
+  }
+
+  async function sendPhaseNotify() {
+    setSendingPhaseNotify(true);
+    setPhaseNotifyResult(null);
+    const res = await fetch("/api/admin/whatsapp/notify-phase", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage: notifyPhaseStage }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setPhaseNotifyResult(
+        data.teams === 0
+          ? data.message
+          : `✓ Mensaje enviado a fanáticos de ${data.teams} equipo(s) · ~${data.sent} mensaje(s)`
+      );
+    } else {
+      setPhaseNotifyResult(`Error: ${data.error}`);
+    }
+    setSendingPhaseNotify(false);
   }
 
   async function sendDailyResults() {
@@ -534,7 +559,7 @@ export default function AdminPage() {
                     const busy = scoringMatch[m.id] ?? false;
                     const result = scoreResult[m.id];
                     const finished = m.status === "FINISHED";
-                    const KO_STAGES = new Set(["LAST_32", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
+                    const KO_STAGES = new Set(["LAST_32", "LAST_16", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
                     const isKO = KO_STAGES.has(m.stage);
                     const homeVal = parseInt(input.home, 10);
                     const awayVal = parseInt(input.away, 10);
@@ -767,6 +792,41 @@ export default function AdminPage() {
                 <> · Fallidos: <span className="text-red-400">{sendResult.failed}</span></>
               )}
             </p>
+          )}
+
+          {/* Notificación equipo favorito por fase */}
+          {waConnected && (
+            <div className="border-t border-slate-700 pt-4 space-y-3">
+              <div>
+                <p className="text-sm font-medium text-white">Avance de equipo favorito</p>
+                <p className="text-xs text-slate-400">
+                  Envía el mensaje de bonus por fase a todos los fanáticos de equipos en la fase seleccionada.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <select
+                  value={notifyPhaseStage}
+                  onChange={(e) => { setNotifyPhaseStage(e.target.value); setPhaseNotifyResult(null); }}
+                  className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500"
+                >
+                  {STAGES.filter((s) => s.value !== "GROUP_STAGE").map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={sendPhaseNotify}
+                  disabled={sendingPhaseNotify}
+                  className="px-4 py-2 bg-green-700 hover:bg-green-600 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+                >
+                  {sendingPhaseNotify ? "Enviando..." : "Enviar notificación"}
+                </button>
+              </div>
+              {phaseNotifyResult && (
+                <p className={`text-xs ${phaseNotifyResult.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>
+                  {phaseNotifyResult}
+                </p>
+              )}
+            </div>
           )}
         </div>
       </div>
