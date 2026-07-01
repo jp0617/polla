@@ -5,8 +5,8 @@ import { scoreMatch, scoreMatchKO, isKnockoutStage } from "@/lib/scoring/engine"
 import { getScoringConfig } from "@/lib/scoring/config";
 
 /**
- * Full rescore: resets all SCORED predictions and rescores them from scratch
- * using the current engine. Fixes any drift from past bugs or corrections.
+ * Full rescore: resets all SCORED predictions and rescores from scratch.
+ * Then recalculates User.totalPoints as the sum of all scored prediction points.
  */
 export async function POST() {
   const session = await auth();
@@ -16,7 +16,6 @@ export async function POST() {
 
   const scoringConfig = await getScoringConfig();
 
-  // Get all finished matches with their predictions
   const matches = await prisma.match.findMany({
     where: { status: "FINISHED", homeScore: { not: null }, awayScore: { not: null } },
     select: {
@@ -32,10 +31,7 @@ export async function POST() {
     },
   });
 
-  // Reset all User.totalPoints to 0
-  await prisma.user.updateMany({ data: { totalPoints: 0 } });
-
-  // Reset all SCORED predictions to LOCKED
+  // Reset all SCORED predictions
   await prisma.prediction.updateMany({
     where: { status: "SCORED" },
     data: { status: "LOCKED", points: null },
@@ -47,8 +43,6 @@ export async function POST() {
     if (match.homeScore === null || match.awayScore === null) continue;
 
     const isKO = isKnockoutStage(match.stage);
-
-    // Infer advancingTeamId for non-draw KO matches
     const isActualDraw = match.homeScore === match.awayScore;
     const advancingTeamId = match.advancingTeamId
       ?? (!isActualDraw
@@ -86,15 +80,24 @@ export async function POST() {
         data: { points: result.points, status: "SCORED" },
       });
 
-      if (result.points > 0) {
-        await prisma.user.update({
-          where: { id: pred.userId },
-          data: { totalPoints: { increment: result.points } },
-        });
-      }
-
       rescored++;
     }
+  }
+
+  // Recalculate User.totalPoints as sum of all SCORED prediction points (single query per user)
+  const users = await prisma.user.findMany({
+    select: {
+      id: true,
+      predictions: { where: { status: "SCORED" }, select: { points: true } },
+    },
+  });
+
+  for (const user of users) {
+    const predPoints = user.predictions.reduce((s, p) => s + (p.points ?? 0), 0);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { totalPoints: predPoints },
+    });
   }
 
   return NextResponse.json({ ok: true, matches: matches.length, rescored });
