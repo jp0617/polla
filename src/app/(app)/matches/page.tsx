@@ -21,7 +21,7 @@ interface Prediction {
   userUpdatedAt: string | null;
 }
 
-const KO_STAGES = new Set(["LAST_32", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
+const KO_STAGES = new Set(["LAST_32", "LAST_16", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
 
 interface Match {
   id: string;
@@ -122,7 +122,7 @@ export default function MatchesPage() {
   });
 
   // Stages from ALL matches so the dropdown shows every phase regardless of active tab
-  const STAGE_ORDER = ["GROUP_STAGE", "LAST_32", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"];
+  const STAGE_ORDER = ["GROUP_STAGE", "LAST_32", "LAST_16", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"];
   const allStages = [...new Set(matches.map((m) => m.stage))].sort(
     (a, b) => STAGE_ORDER.indexOf(a) - STAGE_ORDER.indexOf(b)
   );
@@ -434,6 +434,7 @@ function formatStage(stage: string): string {
   const map: Record<string, string> = {
     GROUP_STAGE: "Fase de Grupos",
     LAST_32: "Dieciseisavos de Final",
+    LAST_16: "Octavos de Final",
     ROUND_OF_16: "Octavos de Final",
     QUARTER_FINALS: "Cuartos de Final",
     SEMI_FINALS: "Semifinales",
