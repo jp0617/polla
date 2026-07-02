@@ -12,6 +12,7 @@ interface Prediction {
   id: string;
   homeScore: number;
   awayScore: number;
+  advancingTeamId: string | null;
   points: number | null;
   status: string;
   userUpdatedAt: string | null;
@@ -22,12 +23,14 @@ interface Prediction {
     status: string;
     homeScore: number | null;
     awayScore: number | null;
+    homeTeamId: string;
+    awayTeamId: string;
     homeTeam: { name: string; shortName: string; crest: string | null; code: string };
     awayTeam: { name: string; shortName: string; crest: string | null; code: string };
   };
 }
 
-const KO_STAGES = new Set(["LAST_32", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
+const KO_STAGES = new Set(["LAST_32", "LAST_16", "ROUND_OF_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]);
 
 function getPredType(pred: Prediction): "exact" | "draw" | "winner" | "miss" | "pending" {
   if (pred.status !== "SCORED") return "pending";
@@ -219,6 +222,16 @@ function PredCard({ pred }: { pred: Prediction }) {
           <div className={`text-sm ${isFinished ? "text-slate-400" : "text-white font-bold text-lg"}`}>
             {isFinished ? "Pronóstico: " : ""}{pred.homeScore} — {pred.awayScore}
           </div>
+          {KO_STAGES.has(match.stage) && pred.homeScore === pred.awayScore && pred.advancingTeamId && (
+            <div className="text-xs text-slate-400 mt-1">
+              Penales:{" "}
+              <span className="font-medium text-white">
+                {pred.advancingTeamId === match.homeTeamId
+                  ? match.homeTeam.shortName
+                  : match.awayTeam.shortName}
+              </span>
+            </div>
+          )}
           {pred.userUpdatedAt && (
             <div className="text-xs text-slate-500">
               Modificado {fmtDatetime(pred.userUpdatedAt)}
