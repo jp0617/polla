@@ -21,6 +21,9 @@ export async function detectPhaseAdvancesForMatch(
 
   for (const team of [homeTeam, awayTeam]) {
     if (stageOrder[currentStage] > stageOrder[team.currentStage]) {
+      // Playing the third-place match means the team lost its semifinal —
+      // that's elimination, not an advance, so no bonus is awarded.
+      const isThirdPlace = currentStage === "THIRD_PLACE";
       const bonusPoints = isKnockoutStage(team.currentStage)
         ? scoringConfig.bonusPhaseAdvanceKO
         : scoringConfig.bonusPhaseAdvance;
@@ -32,7 +35,7 @@ export async function detectPhaseAdvancesForMatch(
             teamId: team.id,
             fromStage: team.currentStage,
             toStage: currentStage,
-            bonusGiven: true,
+            bonusGiven: !isThirdPlace,
           },
         });
         created = true;
@@ -41,28 +44,30 @@ export async function detectPhaseAdvancesForMatch(
       }
 
       if (created) {
-        const favMemberships = await prisma.membership.findMany({
-          where: { favoriteTeamId: team.id },
-          select: { id: true },
-        });
-
-        for (const m of favMemberships) {
-          await prisma.membership.update({
-            where: { id: m.id },
-            data: { bonusPoints: { increment: bonusPoints } },
-          });
-          bonusCount++;
-        }
-
         await prisma.team.update({
           where: { id: team.id },
           data: { currentStage },
         });
 
-        // Notify fans via WhatsApp (fire-and-forget)
-        notifyPhaseAdvance(team.id, currentStage, bonusPoints).catch((err) =>
-          console.error("[WA] notifyPhaseAdvance error:", err)
-        );
+        if (!isThirdPlace) {
+          const favMemberships = await prisma.membership.findMany({
+            where: { favoriteTeamId: team.id },
+            select: { id: true },
+          });
+
+          for (const m of favMemberships) {
+            await prisma.membership.update({
+              where: { id: m.id },
+              data: { bonusPoints: { increment: bonusPoints } },
+            });
+            bonusCount++;
+          }
+
+          // Notify fans via WhatsApp (fire-and-forget)
+          notifyPhaseAdvance(team.id, currentStage, bonusPoints).catch((err) =>
+            console.error("[WA] notifyPhaseAdvance error:", err)
+          );
+        }
       }
     }
   }

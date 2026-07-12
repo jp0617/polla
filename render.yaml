@@ -2,7 +2,7 @@ services:
   - type: web
     name: polla
     runtime: node
-    plan: Starter
+    plan: free
     buildCommand: npm install && npx prisma generate && npm run build
     startCommand: npm start
     healthCheckPath: /
@@ -38,7 +38,7 @@ services:
   - type: cron
     name: polla-sync
     runtime: node
-    schedule: "0/35 * * * *"
+    schedule: "0/10 * * * *"
     buildCommand: echo "skip"
     startCommand: >
       curl -sf -H "Authorization: Bearer $CRON_SECRET" $APP_URL/api/cron/sync
@@ -61,25 +61,6 @@ services:
     buildCommand: echo "skip"
     startCommand: >
       curl -sf -H "Authorization: Bearer $CRON_SECRET" $APP_URL/api/cron/reminders
-    envVars:
-      - key: CRON_SECRET
-        fromService:
-          name: polla
-          type: web
-          envVarKey: CRON_SECRET
-      - key: APP_URL
-        fromService:
-          name: polla
-          type: web
-          property: hostport
-
-  - type: cron
-    name: polla-sync-live
-    runtime: node
-    schedule: "* * * * *"
-    buildCommand: echo "skip"
-    startCommand: >
-      curl -sf -H "Authorization: Bearer $CRON_SECRET" $APP_URL/api/cron/sync-live
     envVars:
       - key: CRON_SECRET
         fromService:
