@@ -176,28 +176,33 @@ export default function StandingsPage() {
                   <RankBadge rank={entry.rank} />
                 </Cell>
                 <Cell>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     {entry.favoriteTeam?.crest && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={entry.favoriteTeam.crest}
                         alt=""
                         title={`Favorito: ${entry.favoriteTeam.name}`}
-                        className="w-5 h-5 object-contain"
+                        className="w-5 h-5 object-contain shrink-0"
                       />
                     )}
-                    <span className={`text-sm ${entry.isCurrentUser ? "text-green-400 font-semibold" : "text-slate-200"}`}>
-                      {entry.name}
-                      {entry.isCurrentUser && <span className="ml-1 text-xs text-green-500">(tú)</span>}
-                      {entry.isLive && <span className="ml-1 text-xs text-red-400">●</span>}
-                    </span>
-                    {entry.championPick?.crest && (
-                      <span className="flex items-center gap-0.5 shrink-0" title={`Campeón elegido: ${entry.championPick.name}`}>
-                        <span className="text-xs">🏆</span>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={entry.championPick.crest} alt="" className="w-4 h-4 object-contain" />
+                    <div className="min-w-0">
+                      <span className={`text-sm ${entry.isCurrentUser ? "text-green-400 font-semibold" : "text-slate-200"}`}>
+                        {entry.name}
+                        {entry.isCurrentUser && <span className="ml-1 text-xs text-green-500">(tú)</span>}
+                        {entry.isLive && <span className="ml-1 text-xs text-red-400">●</span>}
                       </span>
-                    )}
+                      {entry.championPick?.crest && (
+                        <div
+                          className="flex items-center gap-1 mt-0.5"
+                          title={`Campeón elegido: ${entry.championPick.name}`}
+                        >
+                          <span className="text-[10px]">🏆</span>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={entry.championPick.crest} alt="" className="w-3.5 h-3.5 object-contain" />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </Cell>
                 <Cell center>
