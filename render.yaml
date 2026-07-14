@@ -72,3 +72,22 @@ services:
           name: polla
           type: web
           property: host
+
+  - type: cron
+    name: polla-sync-live
+    runtime: node
+    schedule: "* * * * *"
+    buildCommand: echo "skip"
+    startCommand: >
+      curl -sf -H "Authorization: Bearer $CRON_SECRET" https://$APP_URL.onrender.com/api/cron/sync-live
+    envVars:
+      - key: CRON_SECRET
+        fromService:
+          name: polla
+          type: web
+          envVarKey: CRON_SECRET
+      - key: APP_URL
+        fromService:
+          name: polla
+          type: web
+          property: host

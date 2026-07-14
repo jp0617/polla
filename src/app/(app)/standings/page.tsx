@@ -8,10 +8,13 @@ interface LeaderboardEntry {
   name: string;
   totalPoints: number;
   bonusPoints: number;
+  livePoints?: number;
+  isLive?: boolean;
   exactScores: number;
   correctWinners: number;
   correctDraws: number;
   favoriteTeam: { name: string; crest: string | null; code: string } | null;
+  championPick: { name: string; crest: string | null; code: string } | null;
   isCurrentUser: boolean;
 }
 
@@ -37,6 +40,7 @@ export default function StandingsPage() {
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [phase, setPhase] = useState<"all" | "groups" | "ko">("all");
   const [loading, setLoading] = useState(true);
+  const [hasLiveMatch, setHasLiveMatch] = useState(false);
   const [scoring, setScoring] = useState<ScoringConfig>({
     exactScore: 5, correctWinner: 3, correctDraw: 2,
     exactScoreKO: 10, correctWinnerKO: 6, correctAdvancingKO: 4, advancingPickBonusKO: 1,
@@ -63,23 +67,45 @@ export default function StandingsPage() {
 
   useEffect(() => {
     if (selectedGroup === undefined) return;
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (selectedGroup) params.set("groupId", selectedGroup);
-    if (phase !== "all") params.set("phase", phase);
-    const url = `/api/standings${params.size ? `?${params}` : ""}`;
-    fetch(url)
-      .then((r) => r.json())
-      .then((d) => {
-        setLeaderboard(d.leaderboard ?? []);
-        setLoading(false);
-      });
+
+    let cancelled = false;
+    const load = (showSpinner: boolean) => {
+      if (showSpinner) setLoading(true);
+      const params = new URLSearchParams();
+      if (selectedGroup) params.set("groupId", selectedGroup);
+      if (phase !== "all") params.set("phase", phase);
+      const url = `/api/standings${params.size ? `?${params}` : ""}`;
+      fetch(url)
+        .then((r) => r.json())
+        .then((d) => {
+          if (cancelled) return;
+          setLeaderboard(d.leaderboard ?? []);
+          setHasLiveMatch(Boolean(d.hasLiveMatch));
+          setLoading(false);
+        });
+    };
+
+    load(true);
+    // Poll every 15s so the table "moves" live while a match is in play
+    const interval = setInterval(() => load(false), 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [selectedGroup, phase]);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-bold text-white">Clasificación</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-white">Clasificación</h1>
+          {hasLiveMatch && (
+            <span className="flex items-center gap-1 text-xs font-semibold text-red-400 bg-red-950/50 border border-red-800 rounded-full px-2 py-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              EN VIVO
+            </span>
+          )}
+        </div>
 
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex rounded-lg overflow-hidden border border-slate-600">
@@ -153,15 +179,35 @@ export default function StandingsPage() {
                   <div className="flex items-center gap-2">
                     {entry.favoriteTeam?.crest && (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={entry.favoriteTeam.crest} alt="" className="w-5 h-5 object-contain" />
+                      <img
+                        src={entry.favoriteTeam.crest}
+                        alt=""
+                        title={`Favorito: ${entry.favoriteTeam.name}`}
+                        className="w-5 h-5 object-contain"
+                      />
                     )}
                     <span className={`text-sm ${entry.isCurrentUser ? "text-green-400 font-semibold" : "text-slate-200"}`}>
                       {entry.name}
                       {entry.isCurrentUser && <span className="ml-1 text-xs text-green-500">(tú)</span>}
+                      {entry.isLive && <span className="ml-1 text-xs text-red-400">●</span>}
                     </span>
+                    {entry.championPick?.crest && (
+                      <span className="flex items-center gap-0.5 shrink-0" title={`Campeón elegido: ${entry.championPick.name}`}>
+                        <span className="text-xs">🏆</span>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={entry.championPick.crest} alt="" className="w-4 h-4 object-contain" />
+                      </span>
+                    )}
                   </div>
                 </Cell>
-                <Cell center><span className="font-bold text-white">{entry.totalPoints}</span></Cell>
+                <Cell center>
+                  <span className="font-bold text-white">{entry.totalPoints}</span>
+                  {!!entry.livePoints && (
+                    <span className="ml-1 text-xs text-red-400 font-semibold">
+                      ({entry.livePoints > 0 ? "+" : ""}{entry.livePoints})
+                    </span>
+                  )}
+                </Cell>
                 <Cell center><span className="text-yellow-400">{entry.exactScores}</span></Cell>
                 <Cell center><span className="text-green-400">{entry.correctWinners}</span></Cell>
                 <Cell center><span className="text-blue-400">{entry.correctDraws}</span></Cell>

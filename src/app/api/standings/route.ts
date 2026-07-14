@@ -1,13 +1,81 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
-import { isKnockoutStage } from "@/lib/scoring/engine";
+import { isKnockoutStage, scoreMatch, scoreMatchKO } from "@/lib/scoring/engine";
+import { getScoringConfig } from "@/lib/scoring/config";
 
 function matchesPhase(stage: string, phase: string | null): boolean {
   if (!phase || phase === "all") return true;
   if (phase === "ko") return isKnockoutStage(stage);
   if (phase === "groups") return !isKnockoutStage(stage);
   return true;
+}
+
+/**
+ * Projects (without persisting) the points each user would get right now
+ * from LOCKED predictions on matches currently IN_PLAY/PAUSED, using the
+ * live score already synced onto the match. Lets the standings table
+ * "move" as goals happen, ahead of the match actually finishing.
+ */
+async function getLiveProjection(phase: string | null) {
+  const liveMatches = await prisma.match.findMany({
+    where: { status: { in: ["IN_PLAY", "PAUSED"] } },
+    select: {
+      id: true,
+      stage: true,
+      homeScore: true,
+      awayScore: true,
+      homeTeamId: true,
+      awayTeamId: true,
+      advancingTeamId: true,
+    },
+  });
+
+  const relevantMatches = liveMatches.filter(
+    (m) => matchesPhase(m.stage, phase) && m.homeScore !== null && m.awayScore !== null
+  );
+
+  const projection = new Map<string, number>();
+  const liveUserIds = new Set<string>();
+  if (relevantMatches.length === 0) {
+    return { projection, liveUserIds, hasLiveMatch: liveMatches.length > 0 };
+  }
+
+  const scoringConfig = await getScoringConfig();
+  const matchMap = new Map(relevantMatches.map((m) => [m.id, m]));
+
+  const livePredictions = await prisma.prediction.findMany({
+    where: { matchId: { in: relevantMatches.map((m) => m.id) }, status: "LOCKED" },
+    select: { userId: true, matchId: true, homeScore: true, awayScore: true, advancingTeamId: true },
+  });
+
+  for (const pred of livePredictions) {
+    const match = matchMap.get(pred.matchId);
+    if (!match || match.homeScore === null || match.awayScore === null) continue;
+
+    liveUserIds.add(pred.userId);
+    const result = isKnockoutStage(match.stage)
+      ? scoreMatchKO(
+          { home: pred.homeScore, away: pred.awayScore, advancingTeamId: pred.advancingTeamId },
+          {
+            home: match.homeScore,
+            away: match.awayScore,
+            advancingTeamId: match.advancingTeamId,
+            homeTeamId: match.homeTeamId,
+            awayTeamId: match.awayTeamId,
+          },
+          scoringConfig
+        )
+      : scoreMatch(
+          { home: pred.homeScore, away: pred.awayScore },
+          { home: match.homeScore, away: match.awayScore },
+          scoringConfig
+        );
+
+    projection.set(pred.userId, (projection.get(pred.userId) ?? 0) + result.points);
+  }
+
+  return { projection, liveUserIds, hasLiveMatch: liveMatches.length > 0 };
 }
 
 export async function GET(req: NextRequest) {
@@ -20,6 +88,8 @@ export async function GET(req: NextRequest) {
   const isAdmin = (session.user as { isAdmin?: boolean }).isAdmin;
   const groupId = req.nextUrl.searchParams.get("groupId");
   const phase = req.nextUrl.searchParams.get("phase"); // "all" | "groups" | "ko"
+
+  const { projection: liveProjection, liveUserIds, hasLiveMatch } = await getLiveProjection(phase);
 
   // Admin without groupId sees global leaderboard (uses global scoring)
   if (isAdmin && !groupId) {
@@ -37,13 +107,16 @@ export async function GET(req: NextRequest) {
       .map((user, idx) => {
         const bonusPoints = user.memberships.reduce((s, m) => s + m.bonusPoints, 0);
         const predPoints = user.predictions.reduce((s, p) => s + (p.points ?? 0), 0);
-        const total = predPoints + user.manualPoints + bonusPoints;
+        const livePoints = liveProjection.get(user.id) ?? 0;
+        const total = predPoints + user.manualPoints + bonusPoints + livePoints;
         return {
           rank: idx + 1,
           userId: user.id,
           name: user.name,
           totalPoints: total,
           bonusPoints,
+          livePoints,
+          isLive: liveUserIds.has(user.id),
           exactScores: user.predictions.filter((p) => (p.points ?? 0) >= 5).length,
           correctWinners: user.predictions.filter((p) => (p.points ?? 0) === 3 || (p.points ?? 0) === 6).length,
           correctDraws: user.predictions.filter((p) => (p.points ?? 0) === 2 || (p.points ?? 0) === 4).length,
@@ -54,7 +127,7 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b.totalPoints - a.totalPoints || b.exactScores - a.exactScores || a.name.localeCompare(b.name))
       .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
 
-    return NextResponse.json({ leaderboard });
+    return NextResponse.json({ leaderboard, hasLiveMatch });
   }
 
   // Determine which group to show
@@ -89,6 +162,7 @@ export async function GET(req: NextRequest) {
         bonusPoints: true,
         favoriteTeamId: true,
         favoriteTeam: { select: { name: true, crest: true, code: true } },
+        championPick: { select: { name: true, crest: true, code: true } },
         user: {
           select: {
             id: true,
@@ -184,7 +258,8 @@ export async function GET(req: NextRequest) {
           .reduce((s) => s + pts.bonusPhaseAdvanceKO, 0);
         bonusPoints = phase === "groups" ? groupsBonus : koBonus;
       }
-      const total = predictionPoints + m.user.manualPoints + bonusPoints;
+      const livePoints = liveProjection.get(m.user.id) ?? 0;
+      const total = predictionPoints + m.user.manualPoints + bonusPoints + livePoints;
 
       return {
         rank: 0,
@@ -193,10 +268,13 @@ export async function GET(req: NextRequest) {
         totalPoints: total,
         predictionPoints,
         bonusPoints,
+        livePoints,
+        isLive: liveUserIds.has(m.user.id),
         exactScores,
         correctWinners,
         correctDraws,
         favoriteTeam: m.favoriteTeam,
+        championPick: m.championPick,
         isCurrentUser: m.user.id === userId,
       };
     })
@@ -206,6 +284,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     leaderboard,
     groupId: targetCodeId,
+    hasLiveMatch,
     groupConfig: {
       exactScore: pts.exactScore,
       correctWinner: pts.correctWinner,

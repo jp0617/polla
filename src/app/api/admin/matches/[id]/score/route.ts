@@ -6,6 +6,7 @@ import { scoreMatchPredictions } from "@/lib/scoring/scoreMatchPredictions";
 import { detectPhaseAdvancesForMatch } from "@/lib/scoring/detectPhaseAdvances";
 import { isKnockoutStage } from "@/lib/scoring/engine";
 import { notifyMatchResult } from "@/lib/whatsapp/notifyMatchResult";
+import { declareChampion } from "@/lib/scoring/declareChampion";
 
 const schema = z.object({
   homeScore: z.number().int().min(0).max(30),
@@ -115,6 +116,11 @@ export async function POST(
       { id: existing.awayTeamId, currentStage: existing.awayTeam!.currentStage },
       existing.stage
     );
+  }
+
+  // Auto-declare champion when the FINAL is scored with a winner (not a correction)
+  if (!force && existing && existing.stage === "FINAL" && resolvedAdvancingTeamId) {
+    await declareChampion(resolvedAdvancingTeamId);
   }
 
   // Don't send WhatsApp when correcting an already-finished match

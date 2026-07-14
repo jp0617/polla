@@ -9,6 +9,7 @@ import { scoreMatchPredictions } from "@/lib/scoring/scoreMatchPredictions";
 import { notifyMatchResult } from "@/lib/whatsapp/notifyMatchResult";
 import { isKnockoutStage } from "@/lib/scoring/engine";
 import { detectPhaseAdvancesForMatch } from "@/lib/scoring/detectPhaseAdvances";
+import { declareChampion } from "@/lib/scoring/declareChampion";
 
 export async function syncMatches(options: { sendWhatsapp?: boolean } = {}): Promise<{
   updated: number;
@@ -145,6 +146,17 @@ export async function syncMatches(options: { sendWhatsapp?: boolean } = {}): Pro
     // Detect phase advances and award bonus points
     const bonuses = await detectPhaseAdvancesForMatch(homeTeam, awayTeam, stage);
     bonusCount += bonuses;
+
+    // Auto-declare champion when the FINAL is finished with a winner
+    if (
+      stage === "FINAL" &&
+      status === "FINISHED" &&
+      apiMatch.score.winner &&
+      apiMatch.score.winner !== "DRAW"
+    ) {
+      const winnerId = apiMatch.score.winner === "HOME_TEAM" ? homeTeam.id : awayTeam.id;
+      await declareChampion(winnerId);
+    }
   }
 
   // Lock predictions based on configurable lockMinutes
