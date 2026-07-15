@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/client";
 import { sendWhatsAppMessage, getConnectionStatus } from "@/lib/whatsapp/service";
+import { notifyTournamentClose } from "@/lib/whatsapp/notifyTournamentClose";
 
 export type DeclareChampionResult =
   | { ok: true; team: string; awarded: number }
@@ -49,7 +50,8 @@ export async function declareChampion(teamId: string): Promise<DeclareChampionRe
     data: { championTeamId: teamId, championBonusGiven: true },
   });
 
-  // Send WA notification to each winner (fire-and-forget)
+  // Send WA notification to each winner, then a closing message (thank
+  // you + group top 3) to every participant (fire-and-forget).
   Promise.all(
     winningMemberships.map(async (m) => {
       const adminId = m.invitationCode.adminId;
@@ -63,7 +65,9 @@ export async function declareChampion(teamId: string): Promise<DeclareChampionRe
         console.error(`[WA] Failed to send champion bonus to ${m.user.phone}:`, err);
       }
     })
-  ).catch((err) => console.error("[WA] champion notifications error:", err));
+  )
+    .then(() => notifyTournamentClose())
+    .catch((err) => console.error("[WA] champion/close notifications error:", err));
 
   return { ok: true, team: team.name, awarded: winningMemberships.length };
 }

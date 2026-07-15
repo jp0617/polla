@@ -94,6 +94,23 @@ export async function syncMatches(options: { sendWhatsapp?: boolean } = {}): Pro
       }
     }
 
+    // For KO stages, derive the advancing team from the actual full-time score
+    // whenever it's not a draw — the score is ground truth and always wins over
+    // the API's `winner` field, which can otherwise lag behind fullTime during sync.
+    // Only fall back to `winner` when fullTime is tied (i.e. decided on penalties).
+    const ftHome = apiMatch.score.fullTime.home;
+    const ftAway = apiMatch.score.fullTime.away;
+    let advancingTeamUpdate: { advancingTeamId?: string } = {};
+    if (isKnockoutStage(stage) && ftHome !== null && ftAway !== null) {
+      if (ftHome !== ftAway) {
+        advancingTeamUpdate = { advancingTeamId: ftHome > ftAway ? homeTeam.id : awayTeam.id };
+      } else if (apiMatch.score.winner && apiMatch.score.winner !== "DRAW") {
+        advancingTeamUpdate = {
+          advancingTeamId: apiMatch.score.winner === "HOME_TEAM" ? homeTeam.id : awayTeam.id,
+        };
+      }
+    }
+
     const updatePayload = existingMatch?.manualScore
       ? { stage }
       : {
@@ -103,9 +120,7 @@ export async function syncMatches(options: { sendWhatsapp?: boolean } = {}): Pro
           stage,
           kickoff: new Date(apiMatch.utcDate),
           ...(apiMatch.score.fullTime.home !== null ? { scoreUpdatedAt: new Date() } : {}),
-          ...(isKnockoutStage(stage) && apiMatch.score.winner && apiMatch.score.winner !== "DRAW"
-            ? { advancingTeamId: apiMatch.score.winner === "HOME_TEAM" ? homeTeam.id : awayTeam.id }
-            : {}),
+          ...advancingTeamUpdate,
         };
 
     const match = await prisma.match.upsert({

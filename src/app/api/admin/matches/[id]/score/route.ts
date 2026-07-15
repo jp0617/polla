@@ -76,14 +76,12 @@ export async function POST(
     }
   }
 
-  // For KO non-draw results, auto-infer advancingTeamId if not provided
+  // For KO stages, a non-draw score unambiguously determines the winner —
+  // the score always wins over any explicit/stale advancingTeamId. An
+  // explicit advancingTeamId is only meaningful when the score is tied
+  // (i.e. the match was decided on penalties).
   let resolvedAdvancingTeamId = advancingTeamId;
-  if (
-    existing &&
-    isKnockoutStage(existing.stage) &&
-    (resolvedAdvancingTeamId == null) &&
-    homeScore !== awayScore
-  ) {
+  if (existing && isKnockoutStage(existing.stage) && homeScore !== awayScore) {
     resolvedAdvancingTeamId =
       homeScore > awayScore ? existing.homeTeamId : existing.awayTeamId;
   }
