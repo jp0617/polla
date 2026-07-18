@@ -60,11 +60,16 @@ export async function notifyTournamentClose(): Promise<number> {
       const entry = ranked[i];
       if (!entry.phone) continue;
 
-      const message =
-        `🎉 ¡Gracias por participar en la Polla 2026!\n\n` +
-        `🏆 Top 3 del grupo:\n${top3}\n\n` +
-        `Tu posición final: #${i + 1} con ${entry.total} pts\n\n` +
-        `¡Nos vemos en el próximo torneo! ⚽`;
+      const isWinner = i === 0;
+      const message = isWinner
+        ? `🏆👑 ¡FELICIDADES ${entry.name}!\n\n` +
+          `Eres el GANADOR de la Polla 2026 con ${entry.total} pts. 🎉\n\n` +
+          `🏆 Top 3 del grupo:\n${top3}\n\n` +
+          `¡Gracias por participar y nos vemos en el próximo torneo! ⚽`
+        : `🎉 ¡Gracias por participar en la Polla 2026!\n\n` +
+          `🏆 Top 3 del grupo:\n${top3}\n\n` +
+          `Tu posición final: #${i + 1} con ${entry.total} pts\n\n` +
+          `¡Nos vemos en el próximo torneo! ⚽`;
 
       try {
         await sendWhatsAppMessage(code.adminId, entry.phone, message);

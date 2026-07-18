@@ -54,28 +54,78 @@ async function getLiveProjection(phase: string | null) {
     if (!match || match.homeScore === null || match.awayScore === null) continue;
 
     liveUserIds.add(pred.userId);
-    const result = isKnockoutStage(match.stage)
-      ? scoreMatchKO(
-          { home: pred.homeScore, away: pred.awayScore, advancingTeamId: pred.advancingTeamId },
-          {
-            home: match.homeScore,
-            away: match.awayScore,
-            advancingTeamId: match.advancingTeamId,
-            homeTeamId: match.homeTeamId,
-            awayTeamId: match.awayTeamId,
-          },
-          scoringConfig
-        )
-      : scoreMatch(
-          { home: pred.homeScore, away: pred.awayScore },
-          { home: match.homeScore, away: match.awayScore },
-          scoringConfig
-        );
+    const isKO = isKnockoutStage(match.stage);
+    const isLiveTie = match.homeScore === match.awayScore;
 
-    projection.set(pred.userId, (projection.get(pred.userId) ?? 0) + result.points);
+    let livePoints: number;
+    if (isKO && isLiveTie && !match.advancingTeamId) {
+      // Mid-match tie in a KO stage: match.advancingTeamId is still null
+      // (only set once the match actually finishes), so scoreMatchKO would
+      // short-circuit to 0 for everyone. As a live preview — "if it ended
+      // right now" — credit anyone who predicted a draw with the base
+      // correctAdvancingKO/exactScoreKO points. The extra bonus for
+      // guessing the penalty winner can't be projected: penalties haven't
+      // happened yet, so it only applies once the match truly finishes.
+      const predictedDraw = pred.homeScore === pred.awayScore;
+      if (!predictedDraw) {
+        livePoints = 0;
+      } else {
+        const exactScore = pred.homeScore === match.homeScore && pred.awayScore === match.awayScore;
+        livePoints = exactScore ? scoringConfig.exactScoreKO : scoringConfig.correctAdvancingKO;
+      }
+    } else {
+      const result = isKO
+        ? scoreMatchKO(
+            { home: pred.homeScore, away: pred.awayScore, advancingTeamId: pred.advancingTeamId },
+            {
+              home: match.homeScore,
+              away: match.awayScore,
+              advancingTeamId: match.advancingTeamId,
+              homeTeamId: match.homeTeamId,
+              awayTeamId: match.awayTeamId,
+            },
+            scoringConfig
+          )
+        : scoreMatch(
+            { home: pred.homeScore, away: pred.awayScore },
+            { home: match.homeScore, away: match.awayScore },
+            scoringConfig
+          );
+      livePoints = result.points;
+    }
+
+    projection.set(pred.userId, (projection.get(pred.userId) ?? 0) + livePoints);
   }
 
   return { projection, liveUserIds, hasLiveMatch: liveMatches.length > 0 };
+}
+
+/**
+ * Info needed to let the client simulate "what if this team is champion":
+ * the two finalists (if the FINAL match is already set) and whether the
+ * real champion bonus has already been given (in which case simulating
+ * is pointless — it's already baked into bonusPoints).
+ */
+async function getChampionSimInfo() {
+  const [finalMatch, scoringConfig] = await Promise.all([
+    prisma.match.findFirst({
+      where: { stage: "FINAL" },
+      select: {
+        homeTeam: { select: { id: true, name: true, crest: true, code: true } },
+        awayTeam: { select: { id: true, name: true, crest: true, code: true } },
+      },
+    }),
+    prisma.scoringConfig.findUnique({
+      where: { id: "singleton" },
+      select: { championBonus: true, championBonusGiven: true },
+    }),
+  ]);
+
+  return {
+    finalMatch: finalMatch ? { homeTeam: finalMatch.homeTeam, awayTeam: finalMatch.awayTeam } : null,
+    championBonus: scoringConfig?.championBonus ?? 10,
+    championBonusGiven: scoringConfig?.championBonusGiven ?? false,
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -88,8 +138,14 @@ export async function GET(req: NextRequest) {
   const isAdmin = (session.user as { isAdmin?: boolean }).isAdmin;
   const groupId = req.nextUrl.searchParams.get("groupId");
   const phase = req.nextUrl.searchParams.get("phase"); // "all" | "groups" | "ko"
+  const simulateChampionId = req.nextUrl.searchParams.get("simulateChampion");
 
-  const { projection: liveProjection, liveUserIds, hasLiveMatch } = await getLiveProjection(phase);
+  const [{ projection: liveProjection, liveUserIds, hasLiveMatch }, championSim] = await Promise.all([
+    getLiveProjection(phase),
+    getChampionSimInfo(),
+  ]);
+
+  const simulatingChampion = Boolean(simulateChampionId) && !championSim.championBonusGiven;
 
   // Admin without groupId sees global leaderboard (uses global scoring)
   if (isAdmin && !groupId) {
@@ -98,7 +154,7 @@ export async function GET(req: NextRequest) {
         id: true,
         name: true,
         manualPoints: true,
-        memberships: { select: { bonusPoints: true } },
+        memberships: { select: { bonusPoints: true, championPickId: true } },
         predictions: { where: { status: "SCORED" }, select: { points: true } },
       },
     });
@@ -108,7 +164,10 @@ export async function GET(req: NextRequest) {
         const bonusPoints = user.memberships.reduce((s, m) => s + m.bonusPoints, 0);
         const predPoints = user.predictions.reduce((s, p) => s + (p.points ?? 0), 0);
         const livePoints = liveProjection.get(user.id) ?? 0;
-        const total = predPoints + user.manualPoints + bonusPoints + livePoints;
+        const isSimulatedChampion =
+          simulatingChampion && user.memberships.some((m) => m.championPickId === simulateChampionId);
+        const simulatedChampionPoints = isSimulatedChampion ? championSim.championBonus : 0;
+        const total = predPoints + user.manualPoints + bonusPoints + livePoints + simulatedChampionPoints;
         return {
           rank: idx + 1,
           userId: user.id,
@@ -117,6 +176,8 @@ export async function GET(req: NextRequest) {
           bonusPoints,
           livePoints,
           isLive: liveUserIds.has(user.id),
+          simulatedChampionPoints,
+          isSimulatedChampion,
           exactScores: user.predictions.filter((p) => (p.points ?? 0) >= 5).length,
           correctWinners: user.predictions.filter((p) => (p.points ?? 0) === 3 || (p.points ?? 0) === 6).length,
           correctDraws: user.predictions.filter((p) => (p.points ?? 0) === 2 || (p.points ?? 0) === 4).length,
@@ -127,7 +188,7 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b.totalPoints - a.totalPoints || b.exactScores - a.exactScores || a.name.localeCompare(b.name))
       .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
 
-    return NextResponse.json({ leaderboard, hasLiveMatch });
+    return NextResponse.json({ leaderboard, hasLiveMatch, ...championSim });
   }
 
   // Determine which group to show
@@ -162,6 +223,7 @@ export async function GET(req: NextRequest) {
         bonusPoints: true,
         favoriteTeamId: true,
         favoriteTeam: { select: { name: true, crest: true, code: true } },
+        championPickId: true,
         championPick: { select: { name: true, crest: true, code: true } },
         user: {
           select: {
@@ -259,7 +321,9 @@ export async function GET(req: NextRequest) {
         bonusPoints = phase === "groups" ? groupsBonus : koBonus;
       }
       const livePoints = liveProjection.get(m.user.id) ?? 0;
-      const total = predictionPoints + m.user.manualPoints + bonusPoints + livePoints;
+      const isSimulatedChampion = simulatingChampion && m.championPickId === simulateChampionId;
+      const simulatedChampionPoints = isSimulatedChampion ? championSim.championBonus : 0;
+      const total = predictionPoints + m.user.manualPoints + bonusPoints + livePoints + simulatedChampionPoints;
 
       return {
         rank: 0,
@@ -270,6 +334,8 @@ export async function GET(req: NextRequest) {
         bonusPoints,
         livePoints,
         isLive: liveUserIds.has(m.user.id),
+        simulatedChampionPoints,
+        isSimulatedChampion,
         exactScores,
         correctWinners,
         correctDraws,
@@ -285,6 +351,7 @@ export async function GET(req: NextRequest) {
     leaderboard,
     groupId: targetCodeId,
     hasLiveMatch,
+    ...championSim,
     groupConfig: {
       exactScore: pts.exactScore,
       correctWinner: pts.correctWinner,
