@@ -162,15 +162,13 @@ export async function syncMatches(options: { sendWhatsapp?: boolean } = {}): Pro
     const bonuses = await detectPhaseAdvancesForMatch(homeTeam, awayTeam, stage);
     bonusCount += bonuses;
 
-    // Auto-declare champion when the FINAL is finished with a winner
-    if (
-      stage === "FINAL" &&
-      status === "FINISHED" &&
-      apiMatch.score.winner &&
-      apiMatch.score.winner !== "DRAW"
-    ) {
-      const winnerId = apiMatch.score.winner === "HOME_TEAM" ? homeTeam.id : awayTeam.id;
-      await declareChampion(winnerId);
+    // Auto-declare champion when the FINAL is finished with a winner. Reuse
+    // the same score-derived winner as advancingTeamUpdate above — never
+    // apiMatch.score.winner directly, which can otherwise disagree with the
+    // fullTime score during sync and declare the wrong team (irreversible:
+    // this can only run once and already sends WhatsApp messages).
+    if (stage === "FINAL" && status === "FINISHED" && advancingTeamUpdate.advancingTeamId) {
+      await declareChampion(advancingTeamUpdate.advancingTeamId);
     }
   }
 

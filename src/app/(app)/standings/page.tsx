@@ -50,10 +50,8 @@ export default function StandingsPage() {
   const [phase, setPhase] = useState<"all" | "groups" | "ko">("all");
   const [loading, setLoading] = useState(true);
   const [hasLiveMatch, setHasLiveMatch] = useState(false);
-  const [finalMatch, setFinalMatch] = useState<{ homeTeam: TeamRef; awayTeam: TeamRef } | null>(null);
+  const [projectedChampionTeam, setProjectedChampionTeam] = useState<TeamRef | null>(null);
   const [championBonus, setChampionBonus] = useState(0);
-  const [championBonusGiven, setChampionBonusGiven] = useState(false);
-  const [simulateChampion, setSimulateChampion] = useState<string | null>(null);
   const [scoring, setScoring] = useState<ScoringConfig>({
     exactScore: 5, correctWinner: 3, correctDraw: 2,
     exactScoreKO: 10, correctWinnerKO: 6, correctAdvancingKO: 4, advancingPickBonusKO: 1,
@@ -87,7 +85,6 @@ export default function StandingsPage() {
       const params = new URLSearchParams();
       if (selectedGroup) params.set("groupId", selectedGroup);
       if (phase !== "all") params.set("phase", phase);
-      if (simulateChampion) params.set("simulateChampion", simulateChampion);
       const url = `/api/standings${params.size ? `?${params}` : ""}`;
       fetch(url)
         .then((r) => r.json())
@@ -95,9 +92,8 @@ export default function StandingsPage() {
           if (cancelled) return;
           setLeaderboard(d.leaderboard ?? []);
           setHasLiveMatch(Boolean(d.hasLiveMatch));
-          setFinalMatch(d.finalMatch ?? null);
+          setProjectedChampionTeam(d.projectedChampionTeam ?? null);
           setChampionBonus(d.championBonus ?? 0);
-          setChampionBonusGiven(Boolean(d.championBonusGiven));
           setLoading(false);
         });
     };
@@ -109,7 +105,7 @@ export default function StandingsPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [selectedGroup, phase, simulateChampion]);
+  }, [selectedGroup, phase]);
 
   return (
     <div className="space-y-4">
@@ -157,43 +153,21 @@ export default function StandingsPage() {
         </div>
       </div>
 
-      {finalMatch && !championBonusGiven && (
-        <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-3 flex items-center gap-3 flex-wrap">
-          <span className="text-sm text-slate-400 shrink-0">🔮 Simular campeón:</span>
-          <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => setSimulateChampion(null)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                simulateChampion === null
-                  ? "bg-slate-700 border-slate-500 text-white"
-                  : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white"
-              }`}
-            >
-              Ninguno
-            </button>
-            {[finalMatch.homeTeam, finalMatch.awayTeam].map((team) => (
-              <button
-                key={team.id}
-                onClick={() => setSimulateChampion(team.id)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                  simulateChampion === team.id
-                    ? "bg-yellow-900/50 border-yellow-600 text-yellow-300"
-                    : "bg-slate-800 border-slate-700 text-slate-300 hover:text-white"
-                }`}
-              >
-                {team.crest && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={team.crest} alt="" className="w-4 h-4 object-contain" />
-                )}
-                {team.name}
-              </button>
-            ))}
-          </div>
-          {simulateChampion && (
-            <span className="text-xs text-yellow-400">
-              Vista previa: si {[finalMatch.homeTeam, finalMatch.awayTeam].find((t) => t.id === simulateChampion)?.name} sale campeón (+{championBonus} pts a quien lo eligió)
-            </span>
-          )}
+      {projectedChampionTeam && (
+        <div className="bg-yellow-950/30 border border-yellow-800 rounded-xl p-3 flex items-center gap-2 flex-wrap text-sm">
+          <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse shrink-0" />
+          <span className="text-yellow-300">
+            🔮 La final va ganando{" "}
+            {projectedChampionTeam.crest && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={projectedChampionTeam.crest}
+                alt=""
+                className="w-4 h-4 object-contain inline-block align-text-bottom mx-1"
+              />
+            )}
+            <strong>{projectedChampionTeam.name}</strong> — proyectando +{championBonus} pts a quien lo eligió campeón
+          </span>
         </div>
       )}
 
